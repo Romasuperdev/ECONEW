@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ===================== THÈMES ===================== */
+:root, [data-theme="light"] {
+  --bg: #eef2f7;
+  --bg-grad-1: rgba(46,156,156,0.06);
+  --bg-grad-2: rgba(217,164,65,0.07);
+  --surface: #ffffff;
+  --surface-2: #f4f7fb;
+  --text: #1f2a3a;
+  --heading: #17233a;
+  --muted: #63748c;
+  --border: #e4eaf2;
+  --sidebar: #14223f;
+  --sidebar-2: #0e1a30;
+  --sidebar-text: #cdd9ee;
+  --accent: #d9a441;      /* or */
+  --accent-ink: #2a1e05;
+  --teal: #2e9c9c;
+  --shadow: 0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04);
+}
+[data-theme="dark"] {
+  --bg: #0e1626;
+  --bg-grad-1: rgba(46,156,156,0.10);
+  --bg-grad-2: rgba(217,164,65,0.08);
+  --surface: #17223a;
+  --surface-2: #1e2b47;
+  --text: #e7eefb;
+  --heading: #f3f7ff;
+  --muted: #9fb2ce;
+  --border: #283654;
+  --sidebar: #0a1120;
+  --sidebar-2: #070c18;
+  --sidebar-text: #c3d2ec;
+  --accent: #e0ad4b;
+  --accent-ink: #2a1e05;
+  --teal: #38b6b6;
+  --shadow: 0 1px 3px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.35);
+}
+[data-theme="sunny"] {
+  --bg: #fff6e6;
+  --bg-grad-1: rgba(46,156,156,0.10);
+  --bg-grad-2: rgba(224,138,30,0.14);
+  --surface: #fffdf7;
+  --surface-2: #fdefd4;
+  --text: #40331c;
+  --heading: #5a3d12;
+  --muted: #93805a;
+  --border: #f1e2bf;
+  --sidebar: #123a63;
+  --sidebar-2: #0d2c4c;
+  --sidebar-text: #e8f0fb;
+  --accent: #e2841a;      /* orange soleil */
+  --accent-ink: #fff;
+  --teal: #128a8a;
+  --shadow: 0 2px 6px rgba(180,120,30,.12);
+}
+
+* { border-color: var(--border); }
+
+body {
+  @apply antialiased;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(1200px 520px at 100% -10%, var(--bg-grad-1), transparent),
+    radial-gradient(900px 520px at -10% 110%, var(--bg-grad-2), transparent),
+    var(--bg);
+  min-height: 100vh;
+  transition: background-color .25s ease, color .25s ease;
+}
+
+/* Surfaces thématiques */
+.card { background: var(--surface); color: var(--text); border: 1px solid var(--border); box-shadow: var(--shadow); }
+.surface-2 { background: var(--surface-2); }
+.text-muted { color: var(--muted); }
+.text-heading { color: var(--heading); }
+.field {
+  width: 100%; padding: .7rem .9rem; border-radius: .75rem; font-size: .95rem; font-weight: 500;
+  background: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
+  color: var(--text); border: 1.5px solid var(--border); outline: none;
+}
+.field::placeholder { color: var(--muted); font-weight: 400; }
+.field:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.field:focus {
+  border-color: var(--accent); background: var(--surface);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.field:disabled, .field[readonly] { background: color-mix(in srgb, var(--muted) 12%, var(--surface)); color: var(--muted); }
+/* espace vertical confortable entre les champs de modale */
+.modal-2col > form { gap: 1.15rem 1.4rem; }
+
+/* Tables : héritent du thème sur toutes les pages */
+main table { border-collapse: collapse; }
+main table td, main table th { padding: .6rem .85rem; vertical-align: middle; }
+main table th { white-space: nowrap; }
+main table thead { background: var(--surface-2); }
+main table thead th { color: var(--muted); }
+main table td, main table th { border-color: var(--border); }
+main table tbody tr:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 40%, transparent); border-radius: 8px; }
+
+button, a, input, select { transition: all .15s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.animate-fade-up { animation: fadeUp .35s cubic-bezier(.2,.7,.2,1) both; }
+
+/* Formulaires de modale : disposition automatique sur 2 colonnes (plus larges, sans ascenseur) */
+.modal-2col > form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.15rem 1.4rem; align-items: start; }
+.modal-2col > form > * + * { margin-top: 0 !important; }
+.modal-2col > form > .grid,
+.modal-2col > form > .flex,
+.modal-2col > form > label.flex,
+.modal-2col > form > h3,
+.modal-2col > form > p,
+.modal-2col > form > .text-sm,
+.modal-2col > form > .text-red-600,
+.modal-2col > form > textarea,
+.modal-2col > form > .full-width { grid-column: 1 / -1; }
+@media (max-width: 640px) { .modal-2col > form { grid-template-columns: 1fr; } }
+
+/* ---- Décor animé de la page de connexion ---- */
+.login-bg { position: fixed; inset: 0; z-index: 0; overflow: hidden; }
+.login-bg svg { display: block; }
+@keyframes lbFloat  { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-26px); } }
+@keyframes lbFloat2 { 0%,100% { transform: translateY(0); } 50% { transform: translateY(22px); } }
+@keyframes lbCoin   { 0% { transform: translateY(0) rotate(0); } 50% { transform: translateY(-34px) rotate(8deg); } 100% { transform: translateY(0) rotate(0); } }
+@keyframes lbGrow   { 0% { transform: scaleY(.25); } 50% { transform: scaleY(1); } 100% { transform: scaleY(.55); } }
+.lb-float  { animation: lbFloat 7s ease-in-out infinite; }
+.lb-float2 { animation: lbFloat2 9s ease-in-out infinite; }
+.lb-coin   { animation: lbCoin 6s ease-in-out infinite; transform-origin: center; }
+.lb-coin.c2 { animation-duration: 7.5s; animation-delay: -1s; }
+.lb-coin.c3 { animation-duration: 5.5s; animation-delay: -2.5s; }
+.lb-bar    { transform-origin: bottom; animation: lbGrow 4.5s ease-in-out infinite; }
+.lb-bar.b2 { animation-delay: .4s; } .lb-bar.b3 { animation-delay: .8s; } .lb-bar.b4 { animation-delay: 1.2s; }
+@media (prefers-reduced-motion: reduce) { .lb-float,.lb-float2,.lb-coin,.lb-bar { animation: none; } }
+
+/* ---- Fiche d'inscription imprimable ---- */
+.print-fiche { display: none; }
+@media print {
+  body * { visibility: hidden !important; }
+  .print-fiche, .print-fiche * { visibility: visible !important; }
+  .print-fiche { display: block !important; position: absolute; inset: 0; margin: 0; background: #fff; }
+  @page { size: A4; margin: 12mm; }
+}
+.pf-line { margin-bottom: 9px; font-size: 14px; }
+.pf-val { border-bottom: 1px solid #1f3a63; display: inline-block; min-width: 220px; padding: 0 6px 2px; }
+.pf-sec { font-style: italic; font-weight: 800; text-decoration: underline; margin: 16px 0 8px; }
