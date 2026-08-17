@@ -41,6 +41,12 @@ export default function Subscriptions() {
 
   const statusLabel = (s) => ({ active: 'actif', trial: 'en_attente', expired: 'annulee', cancelled: 'annulee' }[s] || s)
 
+  const remove = async (s) => {
+    if (!confirm(`Supprimer l'abonnement de ${s.school?.name || 'cette école'} ?`)) return
+    try { await api.delete(`/super/subscriptions/${s.id}`); load() }
+    catch (err) { alert(err.response?.data?.message || 'Impossible.') }
+  }
+
   return (
     <>
       <PageHeader title="Abonnements & Licences" subtitle={`${items.length} abonnement(s)`}
@@ -60,7 +66,7 @@ export default function Subscriptions() {
         {loading ? <EmptyState message="Chargement…" /> : items.length === 0 ? <EmptyState /> : (
           <table className="w-full text-sm">
             <thead className="bg-brand-50 text-left text-ink">
-              <tr><th className="px-4 py-3">École</th><th>Formule</th><th>Début</th><th>Expiration</th><th>Restant</th><th className="text-right">Montant</th><th>Statut</th></tr>
+              <tr><th className="px-4 py-3">École</th><th>Formule</th><th>Début</th><th>Expiration</th><th>Restant</th><th className="text-right">Montant</th><th>Statut</th><th></th></tr>
             </thead>
             <tbody>
               {items.map((s) => (
@@ -74,6 +80,9 @@ export default function Subscriptions() {
                   </td>
                   <td className="text-right">{formatMoney(s.amount)}</td>
                   <td><Badge value={statusLabel(s.status)} /></td>
+                  <td className="text-right px-4 whitespace-nowrap">
+                    <button onClick={() => remove(s)} className="text-red-600 hover:underline">Suppr.</button>
+                  </td>
                 </tr>
               ))}
             </tbody>

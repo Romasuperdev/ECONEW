@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Table existante dbmasterbacou : US_SOCIETE (societes / etablissements).
@@ -16,6 +18,50 @@ class Societe extends Model
     public $timestamps = false;
 
     protected $guarded = [];
+
+    private const SUSP_TABLE = 'ECO_SOCIETE_SUSPENSION';
+
+    /** Crée la table de suspension si absente (connexion master). */
+    public static function ensureSuspTable(): void
+    {
+        try {
+            if (! Schema::connection('master')->hasTable(self::SUSP_TABLE)) {
+                Schema::connection('master')->create(self::SUSP_TABLE, function ($t) {
+                    $t->string('CODESOCIETE', 50)->primary();
+                    $t->boolean('SUSPENDU')->default(true);
+                    $t->dateTime('DATE_SUSPENSION')->nullable();
+                });
+            }
+        } catch (\Throwable $e) {}
+    }
+
+    /** Codes des sociétés actuellement suspendues. */
+    public static function suspendedCodes(): array
+    {
+        static::ensureSuspTable();
+        try {
+            return DB::connection('master')->table(self::SUSP_TABLE)
+                ->where('SUSPENDU', 1)->pluck('CODESOCIETE')->map(fn ($c) => (string) $c)->all();
+        } catch (\Throwable $e) { return []; }
+    }
+
+    public static function estSuspendue(?string $code): bool
+    {
+        if (! $code) { return false; }
+        return in_array((string) $code, static::suspendedCodes(), true);
+    }
+
+    /** Active/suspend une société par son code. */
+    public static function setSuspendue(string $code, bool $suspendu): void
+    {
+        static::ensureSuspTable();
+        try {
+            DB::connection('master')->table(self::SUSP_TABLE)->updateOrInsert(
+                ['CODESOCIETE' => $code],
+                ['SUSPENDU' => $suspendu ? 1 : 0, 'DATE_SUSPENSION' => $suspendu ? now() : null]
+            );
+        } catch (\Throwable $e) {}
+    }
 
     public function utilisateurs()
     {

@@ -30,24 +30,44 @@ class PensionController extends Controller
     public function grilleStore(Request $request)
     {
         $data = $this->grilleRules($request);
+
+        $fill = function (GrillePension $g) use ($data) {
+            $g->LIBELLE = $data['libelle'] ?? null;
+            $g->MONTANT = $data['montant'] ?? null;
+            $g->MONTANTTOTAL = $data['montant_total'];
+            $g->NBVERS = $data['nb_versements'] ?? null;
+            $g->DATE = $data['date'] ?? now()->toDateString();
+            $g->ANNEE = AnneeContext::current();
+            $g->CODESOCIETE = SocieteContext::current();
+            $g->CODEETABLISSEMENT = \App\Support\EtablissementContext::current();
+        };
+
+        // La table héritée peut ne pas avoir de colonne ID en identité :
+        // on attribue un ID numérique explicite (max+1) pour garantir un
+        // enregistrement modifiable/supprimable. Repli sur l'identité DB si refus.
         $g = new GrillePension();
-        $g->LIBELLE = $data['libelle'] ?? null;
-        $g->MONTANT = $data['montant'] ?? null;
-        $g->MONTANTTOTAL = $data['montant_total'];
-        $g->NBVERS = $data['nb_versements'] ?? null;
-        $g->DATE = $data['date'] ?? now()->toDateString();
-        $g->ANNEE = AnneeContext::current();
-        $g->CODESOCIETE = SocieteContext::current();
-        $g->CODEETABLISSEMENT = \App\Support\EtablissementContext::current();
-        $g->save();
+        $fill($g);
+        try {
+            $next = (int) (GrillePension::query()->max('ID') ?? 0) + 1;
+            $g->incrementing = false;
+            $g->ID = $next;
+            $g->save();
+        } catch (\Throwable $e) {
+            $g = new GrillePension();
+            $fill($g);
+            $g->save();
+        }
 
         return response()->json($g->toNormalized(), 201);
     }
 
     public function grilleUpdate(Request $request, string $grille)
     {
+        if (! ctype_digit((string) $grille)) {
+            return response()->json(['message' => 'Identifiant de tarif invalide.'], 422);
+        }
         $data = $this->grilleRules($request);
-        $g = GrillePension::forTenant()->where('ID', $grille)->firstOrFail();
+        $g = GrillePension::forTenant()->where('ID', (int) $grille)->firstOrFail();
         $g->LIBELLE = $data['libelle'] ?? $g->LIBELLE;
         $g->MONTANT = $data['montant'] ?? $g->MONTANT;
         $g->MONTANTTOTAL = $data['montant_total'];
@@ -59,7 +79,13 @@ class PensionController extends Controller
 
     public function grilleDestroy(string $grille)
     {
-        GrillePension::forTenant()->where('ID', $grille)->firstOrFail()->delete();
+        // Clé non numérique (ex. ligne héritée sans ID) : nettoyage ciblé des
+        // lignes du tenant dont l'ID est NULL, sans lever d'erreur SQL.
+        if (! ctype_digit((string) $grille)) {
+            GrillePension::forTenant()->whereNull('ID')->delete();
+            return response()->json(['message' => 'Ligne(s) sans identifiant supprimée(s).']);
+        }
+        GrillePension::forTenant()->where('ID', (int) $grille)->firstOrFail()->delete();
 
         return response()->json(['message' => 'Ligne supprimée.']);
     }

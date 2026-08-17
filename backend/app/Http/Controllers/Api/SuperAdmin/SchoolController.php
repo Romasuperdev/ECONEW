@@ -19,13 +19,36 @@ class SchoolController extends Controller
 {
     public function index(Request $request)
     {
-        return School::query()
+        $q = School::query()
             ->with('currentSubscription.plan')
             ->withCount(['students', 'users'])
             ->when($request->search, fn ($q, $s) => $q->where('name', 'like', "%$s%")->orWhere('code', 'like', "%$s%"))
             ->when($request->status, fn ($q, $st) => $q->where('status', $st))
-            ->latest()
-            ->paginate($request->per_page ?? 15);
+            ->latest();
+
+        // Si la table SaaS `schools` est vide, on affiche les établissements réels
+        // (T_ETABLISSEMENT) pour que le super admin les voie tout de même.
+        try {
+            if (School::query()->count() === 0) {
+                $search = strtolower((string) $request->search);
+                $rows = \App\Models\Etablissement::available()
+                    ->map(function ($e) {
+                        $n = $e->toNormalized();
+                        return [
+                            'id' => $n['code'], 'code' => $n['code'], 'name' => $n['name'],
+                            'sigle' => null, 'city' => $n['ville'] ?? null, 'country' => "Côte d'Ivoire",
+                            'status' => 'active', 'currency' => 'XOF',
+                            'students_count' => 0, 'users_count' => 0,
+                            'current_subscription' => null, 'is_legacy' => true,
+                        ];
+                    })
+                    ->filter(fn ($r) => $search === '' || str_contains(strtolower((string) $r['name']), $search) || str_contains(strtolower((string) $r['code']), $search))
+                    ->values();
+                return response()->json(['data' => $rows, 'legacy' => true]);
+            }
+        } catch (\Throwable $e) {}
+
+        return $q->paginate($request->per_page ?? 15);
     }
 
     public function store(Request $request)

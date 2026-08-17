@@ -17,14 +17,20 @@ export default function AcademicYears() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ code: '', label: '', start_date: '', end_date: '' })
+  const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
 
   const load = () => { setLoading(true); api.get('/academic-years').then(({ data }) => setItems(data)).finally(() => setLoading(false)) }
   useEffect(load, [])
 
+  const openCreate = () => { setForm({ code: '', label: '', start_date: '', end_date: '' }); setEditing(null); setError(''); setModal(true) }
+  const openEdit = (y) => { setForm({ code: y.code || '', label: y.label || '', start_date: y.start_date || '', end_date: y.end_date || '' }); setEditing(y.id); setError(''); setModal(true) }
   const create = async (e) => {
     e.preventDefault(); setError('')
-    try { await api.post('/academic-years', form); setModal(false); load() }
+    try {
+      if (editing) await api.put(`/academic-years/${editing}`, form); else await api.post('/academic-years', form)
+      setModal(false); load()
+    }
     catch (err) { setError(err.response?.data?.message || 'Erreur.') }
   }
   const action = async (y, path, confirmMsg) => {
@@ -40,7 +46,7 @@ export default function AcademicYears() {
   return (
     <>
       <PageHeader title="Années scolaires" subtitle="Créer, ouvrir et clôturer les années académiques"
-        action={<Button onClick={() => { setForm({ label: '', start_date: '', end_date: '' }); setError(''); setModal(true) }}><Icon name="plus" size={16} /> Nouvelle année</Button>} />
+        action={<Button onClick={openCreate}><Icon name="plus" size={16} /> Nouvelle année</Button>} />
 
       {loading ? <EmptyState message="Chargement…" /> : items.length === 0 ? <EmptyState message="Aucune année. Créez-en une." /> : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -62,6 +68,9 @@ export default function AcademicYears() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-4">
+                  {!y.cloture_definitive && (
+                    <Button variant="ghost" onClick={() => openEdit(y)}>Modifier</Button>
+                  )}
                   {!y.is_current && !y.cloture_definitive && (
                     <Button variant="gold" onClick={() => action(y, 'activate')}>Ouvrir</Button>
                   )}
@@ -81,7 +90,7 @@ export default function AcademicYears() {
         </div>
       )}
 
-      <Modal open={modal} onClose={() => setModal(false)} title="Nouvelle année scolaire">
+      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Modifier l\'année scolaire' : 'Nouvelle année scolaire'}>
         <form onSubmit={create} className="space-y-4">
           <Input label="Code (auto si vide)" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
           <Input label="Libellé (ex. 2025-2026)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required />
@@ -90,7 +99,7 @@ export default function AcademicYears() {
             <Input label="Fin" type="date" value={form.end_date} onChange={(e) => setForm({ ...form, end_date: e.target.value })} />
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button><Button type="submit">Créer</Button></div>
+          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button><Button type="submit">{editing ? 'Enregistrer' : 'Créer'}</Button></div>
         </form>
       </Modal>
     </>

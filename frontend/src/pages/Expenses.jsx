@@ -11,6 +11,7 @@ export default function Expenses() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState({ label: '', amount: '', spent_at: new Date().toISOString().slice(0, 10), method: 'especes', expense_category_id: '', supplier_id: '', status: 'validee' })
+  const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
 
   const load = () => {
@@ -27,17 +28,30 @@ export default function Expenses() {
 
   const openCreate = () => {
     setForm({ label: '', amount: '', spent_at: new Date().toISOString().slice(0, 10), method: 'especes', expense_category_id: '', supplier_id: '', status: 'validee' })
-    setError(''); setModal(true)
+    setEditing(null); setError(''); setModal(true)
+  }
+
+  const openEdit = (ex) => {
+    setForm({
+      label: ex.label || '', amount: ex.amount ?? '',
+      spent_at: (ex.spent_at || '').slice(0, 10) || new Date().toISOString().slice(0, 10),
+      method: ex.method || 'especes',
+      expense_category_id: ex.category?.id ?? ex.expense_category_id ?? '',
+      supplier_id: ex.supplier?.id ?? ex.supplier_id ?? '',
+      status: ex.status || 'validee',
+    })
+    setEditing(ex.id); setError(''); setModal(true)
   }
 
   const save = async (e) => {
     e.preventDefault(); setError('')
     try {
-      await api.post('/expenses', {
+      const payload = {
         ...form, amount: Number(form.amount),
         expense_category_id: form.expense_category_id || null,
         supplier_id: form.supplier_id || null,
-      })
+      }
+      if (editing) await api.put(`/expenses/${editing}`, payload); else await api.post('/expenses', payload)
       setModal(false); load()
     } catch (err) { setError(err.response?.data?.message || 'Erreur.') }
   }
@@ -70,7 +84,10 @@ export default function Expenses() {
                   <td>{formatDate(ex.spent_at)}</td>
                   <td><Badge value={ex.status} /></td>
                   <td className="text-right font-medium text-red-600">{formatMoney(ex.amount)}</td>
-                  <td className="text-right px-4"><button onClick={() => remove(ex.id)} className="text-red-600 hover:underline">Suppr.</button></td>
+                  <td className="text-right px-4 space-x-3 whitespace-nowrap">
+                    <button onClick={() => openEdit(ex)} className="hover:underline" style={{ color: 'var(--teal)' }}>Modifier</button>
+                    <button onClick={() => remove(ex.id)} className="text-red-600 hover:underline">Suppr.</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -78,34 +95,37 @@ export default function Expenses() {
         )}
       </Card>
 
-      <Modal open={modal} onClose={() => setModal(false)} title="Nouvelle dépense">
-        <form onSubmit={save} className="space-y-4">
-          <Input label="Libellé" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} required />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Montant" type="number" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
-            <Input label="Date" type="date" value={form.spent_at} onChange={(e) => setForm({ ...form, spent_at: e.target.value })} required />
+      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Modifier la dépense' : 'Nouvelle dépense'}>
+        <form onSubmit={save} className="space-y-5">
+          {/* Détails de la dépense */}
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wide text-ink mb-2" style={{ letterSpacing: '.04em' }}>Détails</div>
+            <div className="space-y-3">
+              <Input label="Libellé" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} placeholder="Ex : Achat fournitures de bureau" required />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Input label="Montant (XOF)" type="number" min="0" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required />
+                <Input label="Date" type="date" value={form.spent_at} onChange={(e) => setForm({ ...form, spent_at: e.target.value })} required />
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Select label="Catégorie" value={form.expense_category_id} onChange={(e) => setForm({ ...form, expense_category_id: e.target.value })}>
-              <option value="">— Aucune —</option>
-              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </Select>
-            <Select label="Fournisseur" value={form.supplier_id} onChange={(e) => setForm({ ...form, supplier_id: e.target.value })}>
-              <option value="">— Aucun —</option>
-              {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
+
+          {/* Règlement */}
+          <div>
+            <div className="text-xs font-bold uppercase tracking-wide text-ink mb-2" style={{ letterSpacing: '.04em' }}>Règlement</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Select label="Mode de paiement" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
+                <option value="especes">Espèces</option><option value="mobile_money">Mobile Money</option>
+                <option value="virement">Virement</option><option value="cheque">Chèque</option><option value="carte">Carte</option>
+              </Select>
+              <Select label="Statut" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                <option value="validee">Validée</option><option value="en_attente">En attente</option><option value="rejetee">Rejetée</option>
+              </Select>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Select label="Mode" value={form.method} onChange={(e) => setForm({ ...form, method: e.target.value })}>
-              <option value="especes">Espèces</option><option value="mobile_money">Mobile Money</option>
-              <option value="virement">Virement</option><option value="cheque">Chèque</option><option value="carte">Carte</option>
-            </Select>
-            <Select label="Statut" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
-              <option value="validee">Validée</option><option value="en_attente">En attente</option><option value="rejetee">Rejetée</option>
-            </Select>
-          </div>
-          {error && <div className="text-sm text-red-600">{error}</div>}
-          <div className="flex justify-end gap-2">
+
+          {error && <div className="rounded-lg px-3 py-2 text-sm" style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>{error}</div>}
+
+          <div className="flex justify-end gap-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
             <Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button>
             <Button type="submit">Enregistrer</Button>
           </div>

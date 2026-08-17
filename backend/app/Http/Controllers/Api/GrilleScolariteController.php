@@ -93,8 +93,11 @@ class GrilleScolariteController extends Controller
 
     public function update(Request $request, string $grille)
     {
+        if (! ctype_digit((string) $grille)) {
+            return response()->json(['message' => 'Identifiant de grille invalide.'], 422);
+        }
         $data = $this->rules($request);
-        $g = GrilleScolarite::forTenant()->where((new GrilleScolarite)->getKeyName(), $grille)->firstOrFail();
+        $g = GrilleScolarite::forTenant()->where((new GrilleScolarite)->getKeyName(), (int) $grille)->firstOrFail();
         $this->fill($g, $data);
         try {
             $g->save();
@@ -111,7 +114,12 @@ class GrilleScolariteController extends Controller
 
     public function destroy(string $grille)
     {
-        GrilleScolarite::forTenant()->where((new GrilleScolarite)->getKeyName(), $grille)->firstOrFail()->delete();
+        $key = (new GrilleScolarite)->getKeyName();
+        if (! ctype_digit((string) $grille)) {
+            GrilleScolarite::forTenant()->whereNull($key)->delete();
+            return response()->json(['message' => 'Grille(s) sans identifiant supprimée(s).']);
+        }
+        GrilleScolarite::forTenant()->where($key, (int) $grille)->firstOrFail()->delete();
 
         return response()->json(['message' => 'Grille supprimée.']);
     }

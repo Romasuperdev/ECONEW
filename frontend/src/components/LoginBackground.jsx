@@ -6,11 +6,11 @@ export default function LoginBackground() {
         <defs>
           <linearGradient id="lbSky" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="var(--sidebar)" />
-            <stop offset="1" stopColor="color-mix(in srgb, var(--sidebar) 65%, #0b1f3a)" />
+            <stop offset="1" stopColor="color-mix(in srgb, var(--sidebar) 65%, #04301f)" />
           </linearGradient>
           <linearGradient id="lbGold" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0" stopColor="var(--accent)" />
-            <stop offset="1" stopColor="#b8860b" />
+            <stop offset="1" stopColor="#009A6B" />
           </linearGradient>
         </defs>
 
@@ -39,9 +39,9 @@ export default function LoginBackground() {
         </g>
 
         {/* pièces de monnaie (F) */}
-        <g className="lb-coin c1"><circle cx="560" cy="230" r="34" fill="url(#lbGold)"/><text x="560" y="242" textAnchor="middle" fontSize="30" fontWeight="700" fill="#5b3d00">F</text></g>
-        <g className="lb-coin c2"><circle cx="840" cy="330" r="26" fill="url(#lbGold)"/><text x="840" y="340" textAnchor="middle" fontSize="24" fontWeight="700" fill="#5b3d00">F</text></g>
-        <g className="lb-coin c3"><circle cx="690" cy="640" r="30" fill="url(#lbGold)"/><text x="690" y="651" textAnchor="middle" fontSize="26" fontWeight="700" fill="#5b3d00">F</text></g>
+        <g className="lb-coin c1"><circle cx="560" cy="230" r="34" fill="url(#lbGold)"/><text x="560" y="242" textAnchor="middle" fontSize="30" fontWeight="700" fill="#06301f">F</text></g>
+        <g className="lb-coin c2"><circle cx="840" cy="330" r="26" fill="url(#lbGold)"/><text x="840" y="340" textAnchor="middle" fontSize="24" fontWeight="700" fill="#06301f">F</text></g>
+        <g className="lb-coin c3"><circle cx="690" cy="640" r="30" fill="url(#lbGold)"/><text x="690" y="651" textAnchor="middle" fontSize="26" fontWeight="700" fill="#06301f">F</text></g>
 
         {/* chapeau de diplômé */}
         <g className="lb-float" transform="translate(430 380)" opacity="0.9">

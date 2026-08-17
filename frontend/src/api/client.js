@@ -1,6 +1,10 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// En dev, si VITE_API_URL n'est pas défini, on utilise un chemin relatif (/api)
+// qui passe par le proxy Vite : l'app est alors accessible depuis n'importe quel
+// appareil du réseau local (http://192.168.x.x:5173) sans configuration.
+// En production, définir VITE_API_URL sur l'URL réelle de l'API.
+const baseURL = import.meta.env.VITE_API_URL || ''
 
 const api = axios.create({
   baseURL: `${baseURL}/api`,

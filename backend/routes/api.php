@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\AcademicYearController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ActivityController;
 use App\Http\Controllers\Api\CantineController;
+use App\Http\Controllers\Api\CommunicationController;
 use App\Http\Controllers\Api\CashAccountController;
 use App\Http\Controllers\Api\CashTransactionController;
 use App\Http\Controllers\Api\CycleController;
@@ -23,6 +24,12 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentModeController;
 use App\Http\Controllers\Api\SmsController;
 use App\Http\Controllers\Api\SmsConfigController;
+use App\Http\Controllers\Api\MailConfigController;
+use App\Http\Controllers\Api\PaiementDossierController;
+use App\Http\Controllers\Api\AffectationEtatController;
+use App\Http\Controllers\Api\DepartController;
+use App\Http\Controllers\Api\PrerequisController;
+use App\Http\Controllers\Api\ImportController;
 use App\Http\Controllers\Api\DestinationController;
 use App\Http\Controllers\Api\TransportTarifController;
 use App\Http\Controllers\Api\CantineTarifController;
@@ -45,6 +52,7 @@ use App\Http\Controllers\Api\TreasuryOverviewController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VersementController;
 use App\Http\Controllers\Api\SuperAdmin\AffectationController;
+use App\Http\Controllers\Api\SuperAdmin\EtablissementAffectationController;
 use App\Http\Controllers\Api\SuperAdmin\ApplicationController;
 use App\Http\Controllers\Api\SuperAdmin\AuditLogController;
 use App\Http\Controllers\Api\SuperAdmin\DashboardController as SuperDashboardController;
@@ -58,10 +66,12 @@ use App\Models\Subscription;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\MailDiffusionController;
 
-// Authentification
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/lookup', [AuthController::class, 'lookup']);
-Route::post('/login/verify-otp', [AuthController::class, 'verifyOtp']);
+// Authentification (limitation de débit anti-force brute)
+Route::middleware('throttle:10,1')->group(function () {
+    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/lookup', [AuthController::class, 'lookup']);
+    Route::post('/login/verify-otp', [AuthController::class, 'verifyOtp']);
+});
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);
@@ -79,6 +89,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('users/{user}/reset-password', [SchoolUserController::class, 'resetPassword']);
         Route::patch('users/{user}/active', [SchoolUserController::class, 'setActive']);
         Route::delete('users/{user}', [SchoolUserController::class, 'destroy']);
+        Route::patch('societes/{societe}/suspendre', [SocieteController::class, 'suspendre']);
+        Route::patch('societes/{societe}/activer', [SocieteController::class, 'activer']);
         Route::apiResource('societes', SocieteController::class);
         Route::get('rh-users', [RhUserController::class, 'index']);
         Route::post('rh-users', [RhUserController::class, 'store']);
@@ -95,7 +107,46 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('societe-applications', [AffectationController::class, 'societeApplications']);
         Route::post('societe-applications', [AffectationController::class, 'assignApp']);
         Route::delete('societe-applications', [AffectationController::class, 'unassignApp']);
+        // Affectations établissement (console)
+        Route::get('etablissements', [EtablissementAffectationController::class, 'etablissements']);
+        Route::post('etablissements/affecter-societe', [EtablissementAffectationController::class, 'affecterSociete']);
+        Route::get('etab-users', [EtablissementAffectationController::class, 'etabUsers']);
+        Route::post('etab-users', [EtablissementAffectationController::class, 'affecterUser']);
+        Route::delete('etab-users/{affectation}', [EtablissementAffectationController::class, 'unassignUser']);
         Route::get('audit-logs', [AuditLogController::class, 'index']);
+        // Facturation plateforme : abonnements impayés / en retard
+        Route::get('facturation/impayes', [\App\Http\Controllers\Api\SuperAdmin\FacturationController::class, 'impayes']);
+        // Paramètres système globaux
+        Route::get('parametres-systeme', [\App\Http\Controllers\Api\SuperAdmin\ParametreSystemeController::class, 'index']);
+        Route::put('parametres-systeme', [\App\Http\Controllers\Api\SuperAdmin\ParametreSystemeController::class, 'update']);
+    });
+
+    /* ---------------- Console Admin d'établissement (accès granulaire par module) ---------------- */
+    Route::prefix('admin-etablissement')->middleware('role:admin_etablissement,super_admin')->group(function () {
+        Route::middleware('check.module:gestion_utilisateurs')->group(function () {
+            Route::get('utilisateurs', [EstablishmentUserController::class, 'index']);
+            Route::post('utilisateurs', [EstablishmentUserController::class, 'store']);
+            Route::put('utilisateurs/{user}', [EstablishmentUserController::class, 'update']);
+            Route::delete('utilisateurs/{user}', [EstablishmentUserController::class, 'destroy']);
+            Route::put('utilisateurs/{user}/caisse', [EstablishmentUserController::class, 'assignCaisse']);
+            Route::post('utilisateurs/{user}/reset-password', [EstablishmentUserController::class, 'resetPassword']);
+        });
+        Route::middleware('check.module:parametres_etablissement')->group(function () {
+            Route::get('parametres', [\App\Http\Controllers\Api\AdminEtablissement\ParametreEtablissementController::class, 'index']);
+            Route::put('parametres', [\App\Http\Controllers\Api\AdminEtablissement\ParametreEtablissementController::class, 'update']);
+        });
+        Route::middleware('check.module:rapports_transversaux')->group(function () {
+            Route::get('rapports', [\App\Http\Controllers\Api\AdminEtablissement\RapportController::class, 'index']);
+        });
+        Route::middleware('check.module:abonnement_facturation')->group(function () {
+            Route::get('abonnement', [\App\Http\Controllers\Api\AdminEtablissement\AbonnementController::class, 'show']);
+        });
+    });
+    // Attribution des modules à un compte admin_etablissement (directeur / super_admin)
+    Route::middleware('role:directeur,super_admin')->group(function () {
+        Route::get('admin-etablissement/modules-catalogue', [\App\Http\Controllers\Api\AdminEtablissement\PermissionController::class, 'catalogue']);
+        Route::get('admin-etablissement/utilisateurs/{user}/permissions-modules', [\App\Http\Controllers\Api\AdminEtablissement\PermissionController::class, 'show']);
+        Route::put('admin-etablissement/utilisateurs/{user}/permissions-modules', [\App\Http\Controllers\Api\AdminEtablissement\PermissionController::class, 'update']);
     });
 
     /* ---------------- Espace Etablissement (multi-tenant) ---------------- */
@@ -127,6 +178,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('transport-tarifs', [TransportTarifController::class, 'index']);
         Route::get('cantine-tarifs', [CantineTarifController::class, 'index']);
         Route::get('remises', [RemiseController::class, 'index']);
+        Route::get('remises/eligibilite', [RemiseController::class, 'eligibilite']);
         Route::get('student-dossiers', [StudentDossierController::class, 'index']);
         Route::get('caisse-session/current', [CaisseSessionController::class, 'current']);
         Route::get('echeancier', [EcheancierController::class, 'index']);
@@ -149,6 +201,51 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('versements/{versement}/pdf', [DocumentController::class, 'versementPdf']);
         Route::get('invoices/{invoice}/pdf', [DocumentController::class, 'invoicePdf']);
         Route::get('payments/{payment}/pdf', [DocumentController::class, 'receiptPdf']);
+
+        /* --- Réception des dossiers & frais annexes : lectures ouvertes --- */
+        Route::get('eleves/{matricule}/infos', [PaiementDossierController::class, 'infos']);
+        Route::get('paiements-dossiers', [PaiementDossierController::class, 'index']);
+        Route::get('paiements-dossiers/{id}/recu', [PaiementDossierController::class, 'recu']);
+
+        /* --- Paiements prévisionnels de l'État (consultation + export) --- */
+        Route::get('paiements-previsionnels-etat', [AffectationEtatController::class, 'index']);
+        Route::get('paiements-previsionnels-etat/export', [AffectationEtatController::class, 'export']);
+
+        /* --- Importation (onboarding) : import.manage --- */
+        Route::middleware('ability:import.manage')->group(function () {
+            Route::get('import/types', [ImportController::class, 'typesList']);
+            Route::get('import/modele/{type}', [ImportController::class, 'modele']);
+            Route::post('import/{type}/previsualiser', [ImportController::class, 'previsualiser']);
+            Route::post('import/{type}/confirmer', [ImportController::class, 'confirmer']);
+            Route::get('import/historique', [ImportController::class, 'historique']);
+            Route::get('import/historique/{id}/fichier', [ImportController::class, 'telecharger']);
+        });
+
+        /* --- Paramétrage : Dossiers & frais annexes (T_PREREQUIS) --- */
+        Route::get('parametrage/dossiers-frais-annexes', [PrerequisController::class, 'index']);
+        Route::middleware('ability:tarifs.manage')->group(function () {
+            Route::post('parametrage/dossiers-frais-annexes', [PrerequisController::class, 'store']);
+            Route::put('parametrage/dossiers-frais-annexes/{id}', [PrerequisController::class, 'update']);
+            Route::delete('parametrage/dossiers-frais-annexes/{id}', [PrerequisController::class, 'destroy']);
+        });
+
+        /* --- Départs : consultation + export --- */
+        Route::get('departs', [DepartController::class, 'index']);
+        Route::get('departs/export', [DepartController::class, 'export']);
+
+        /* --- Départs : écritures --- */
+        Route::middleware('ability:departs.manage')->group(function () {
+            Route::post('departs', [DepartController::class, 'store']);
+            Route::put('departs/{id}', [DepartController::class, 'update']);
+            Route::delete('departs/{id}', [DepartController::class, 'destroy']);
+        });
+
+        /* --- Réception des dossiers & frais annexes : écritures --- */
+        Route::middleware('ability:dossiers.manage')->group(function () {
+            Route::post('paiements-dossiers', [PaiementDossierController::class, 'store']);
+            Route::put('paiements-dossiers/{id}', [PaiementDossierController::class, 'update']);
+            Route::delete('paiements-dossiers/{id}', [PaiementDossierController::class, 'destroy']);
+        });
 
         /* --- Configuration academique & frais : config.manage --- */
         Route::middleware(['ability:config.manage', 'exercice'])->group(function () {
@@ -192,6 +289,11 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('sms/{sms}', [SmsController::class, 'destroy']);
             Route::get('sms-config', [SmsConfigController::class, 'show']);
             Route::put('sms-config', [SmsConfigController::class, 'update']);
+            Route::post('sms-config/test', [SmsConfigController::class, 'test']);
+            Route::get('mail-config', [MailConfigController::class, 'show']);
+            Route::put('mail-config', [MailConfigController::class, 'update']);
+            Route::post('mail-config/test', [MailConfigController::class, 'test']);
+            Route::post('mail-config/send-test', [MailConfigController::class, 'sendTest']);
         });
 
         /* --- Services (grilles & logistique) : services.manage --- */
@@ -271,15 +373,18 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy']);
         });
 
-        /* --- Tresorerie : treasury.view --- */
+        /* --- Tresorerie : lecture (treasury.view) --- */
         Route::middleware('ability:treasury.view')->group(function () {
             Route::get('treasury-overview', [TreasuryOverviewController::class, 'index']);
             Route::get('cash-accounts', [CashAccountController::class, 'index']);
             Route::get('cash-accounts/{cashAccount}', [CashAccountController::class, 'show']);
+            Route::get('cash-transactions', [CashTransactionController::class, 'index']);
+        });
+        /* --- Tresorerie : ecriture (treasury.manage) --- */
+        Route::middleware('ability:treasury.manage')->group(function () {
             Route::post('cash-accounts', [CashAccountController::class, 'store']);
             Route::put('cash-accounts/{cashAccount}', [CashAccountController::class, 'update']);
             Route::delete('cash-accounts/{cashAccount}', [CashAccountController::class, 'destroy']);
-            Route::get('cash-transactions', [CashTransactionController::class, 'index']);
             Route::post('cash-transactions', [CashTransactionController::class, 'store']);
             Route::post('cash-transfers', [CashTransactionController::class, 'transfer']);
             Route::delete('cash-transactions/{cashTransaction}', [CashTransactionController::class, 'destroy']);
@@ -294,6 +399,10 @@ Route::middleware('auth:sanctum')->group(function () {
             Route::get('reports/export/expenses', [ReportController::class, 'exportExpensesCsv']);
             Route::get('reports/export/summary-xlsx', [ReportController::class, 'exportSummaryXlsx']);
             Route::get('reports/export/summary-pdf', [ReportController::class, 'exportSummaryPdf']);
+            // Communication de masse (SMS & e-mail vers les tuteurs)
+            Route::get('communication/destinataires', [CommunicationController::class, 'destinataires']);
+            Route::post('communication/sms', [CommunicationController::class, 'sms']);
+            Route::post('communication/mail', [CommunicationController::class, 'mail']);
         });
 
         /* --- Administration etablissement : users.manage --- */

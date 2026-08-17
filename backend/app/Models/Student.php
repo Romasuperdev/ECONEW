@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Support\AnneeContext;
+use App\Support\EtablissementContext;
+use App\Support\SchemaCache;
 use App\Support\SocieteContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -36,12 +38,37 @@ class Student extends Model
         return $this->belongsTo(SchoolClass::class, 'CodeClasse', 'CodeClasse');
     }
 
+    /** Première colonne existante de T_ETUDIANT parmi des candidats. */
+    public static function col(array $cands): ?string
+    {
+        try {
+            $cols = SchemaCache::columns('T_ETUDIANT');
+            foreach ($cands as $c) {
+                if (in_array($c, $cols, true)) {
+                    return $c;
+                }
+            }
+        } catch (\Throwable $e) {}
+        return null;
+    }
+
     public function scopeForTenant(Builder $q): Builder
     {
         $annee = AnneeContext::current();
         $societe = SocieteContext::current();
-        return $q->when($annee, fn ($x) => $x->where('AnneeAcad', $annee))
-                 ->when($societe, fn ($x) => $x->where('CODESOCIETE', $societe));
+        $etab = EtablissementContext::current();
+
+        // Détection tolérante des colonnes réelles (le nom exact varie selon la base).
+        $cAnnee = static::col(['AnneeAcad', 'ANNEE', 'Annee', 'AnneeScolaire', 'CODEANNEE', 'CodeAnnee']);
+        $cSoc = static::col(['CODESOCIETE', 'CodeSociete']);
+        $cSite = static::col(['Site', 'SITE', 'CODEETABLISSEMENT', 'CodeEtablissement']);
+
+        return $q
+            // Filtre par année scolaire sélectionnée (isolation par exercice).
+            ->when($annee && $cAnnee, fn ($x) => $x->where($cAnnee, $annee))
+            ->when($societe && $cSoc, fn ($x) => $x->where($cSoc, $societe))
+            // Isolation établissement tolérante (laisse passer les lignes non rattachées).
+            ->when($etab && $cSite, fn ($x) => $x->where(fn ($w) => $w->where($cSite, $etab)->orWhereNull($cSite)));
     }
 
     public function getFullNameAttribute(): string

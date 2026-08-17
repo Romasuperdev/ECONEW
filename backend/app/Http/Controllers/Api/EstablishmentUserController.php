@@ -23,26 +23,46 @@ class EstablishmentUserController extends Controller
 
     private function hasCaisseTable(): bool
     {
-        try { return Schema::connection('economat')->hasTable('ECO_USER_CAISSE'); }
-        catch (\Throwable $e) { return false; }
-    }
-
-    private function setCaisse($userId, ?string $code): void
-    {
-        if (! $this->hasCaisseTable()) return;
         try {
-            DB::connection('economat')->table('ECO_USER_CAISSE')->where('USER_ID', $userId)->delete();
-            if ($code) {
-                DB::connection('economat')->table('ECO_USER_CAISSE')->insert([
-                    'USER_ID' => $userId, 'CODECAISSE' => $code,
-                    'CODESOCIETE' => SocieteContext::current(),
-                    'CODEETABLISSEMENT' => EtablissementContext::current(),
-                    'CREATED_AT' => now(),
-                ]);
+            if (! Schema::connection('economat')->hasTable('ECO_USER_CAISSE')) {
+                Schema::connection('economat')->create('ECO_USER_CAISSE', function ($t) {
+                    $t->increments('id');
+                    $t->string('USER_ID', 50);
+                    $t->string('CODECAISSE', 50)->nullable();
+                    $t->string('CODESOCIETE', 50)->nullable();
+                    $t->string('CODEETABLISSEMENT', 50)->nullable();
+                    $t->dateTime('CREATED_AT')->nullable();
+                });
             }
+            return true;
         } catch (\Throwable $e) {
+            return false;
         }
     }
+
+    /** Écrit l'affectation caisse en n'utilisant que les colonnes réellement présentes. Renvoie true si OK. */
+    private function setCaisse($userId, ?string $code): bool
+    {
+        if (! $this->hasCaisseTable()) {
+            return false;
+        }
+        try {
+            $cols = Schema::connection('economat')->getColumnListing('ECO_USER_CAISSE');
+            DB::connection('economat')->table('ECO_USER_CAISSE')->where('USER_ID', $userId)->delete();
+            if ($code) {
+                $row = ['USER_ID' => $userId, 'CODECAISSE' => $code];
+                if (in_array('CODESOCIETE', $cols, true)) { $row['CODESOCIETE'] = SocieteContext::current(); }
+                if (in_array('CODEETABLISSEMENT', $cols, true)) { $row['CODEETABLISSEMENT'] = EtablissementContext::current(); }
+                if (in_array('CREATED_AT', $cols, true)) { $row['CREATED_AT'] = now(); }
+                DB::connection('economat')->table('ECO_USER_CAISSE')->insert($row);
+            }
+            return true;
+        } catch (\Throwable $e) {
+            $this->caisseError = $e->getMessage();
+            return false;
+        }
+    }
+    private ?string $caisseError = null;
 
     private function caisseOf($userId): ?string
     {
@@ -60,16 +80,31 @@ class EstablishmentUserController extends Controller
         $etab = EtablissementContext::current();
 
         // 1) Utilisateurs affectés à la société via la console (societe_utilisateur).
+        //    societe_id est numérique (= NUMAUTO) : on résout d'abord le NUMAUTO,
+        //    puis on tolère un pivot stockant soit le NUMAUTO, soit le code société.
         $consoleIds = collect();
         try {
-            $candidates = array_values(array_filter([$soc]));
-            try {
-                $numauto = \App\Models\Societe::where('CODESOCIETE', $soc)->value('NUMAUTO');
-                if ($numauto) { $candidates[] = $numauto; }
-            } catch (\Throwable $e) {}
-            if (! empty($candidates) && Schema::connection('master')->hasTable('societe_utilisateur')) {
-                $consoleIds = collect(DB::connection('master')->table('societe_utilisateur')
-                    ->whereIn('societe_id', $candidates)->pluck('user_id'));
+            $numauto = null;
+            try { $numauto = \App\Models\Societe::where('CODESOCIETE', $soc)->value('NUMAUTO'); } catch (\Throwable $e) {}
+            if (Schema::connection('master')->hasTable('societe_utilisateur')) {
+                $q = DB::connection('master')->table('societe_utilisateur');
+                if ($numauto !== null) {
+                    $q->where('societe_id', $numauto);
+                } elseif ($soc !== null) {
+                    $q->where('societe_id', $soc); // repli si le pivot stocke le code
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+                $consoleIds = collect($q->pluck('user_id'));
+            }
+        } catch (\Throwable $e) {}
+
+        // 1b) Utilisateurs affectés directement à l'établissement (console → ECO_USER_ETAB).
+        try {
+            if ($etab && Schema::connection('economat')->hasTable('ECO_USER_ETAB')) {
+                $etabIds = DB::connection('economat')->table('ECO_USER_ETAB')
+                    ->where('CODEETABLISSEMENT', $etab)->pluck('USER_ID');
+                $consoleIds = $consoleIds->merge($etabIds);
             }
         } catch (\Throwable $e) {}
 
@@ -116,12 +151,16 @@ class EstablishmentUserController extends Controller
         $data = $request->validate([
             'caisse_code' => ['nullable', 'string', 'max:50'],
         ]);
-        $this->setCaisse($user, $data['caisse_code'] ?? null);
+        $ok = $this->setCaisse($user, $data['caisse_code'] ?? null);
+        if (! $ok) {
+            return response()->json(['message' => 'Affectation impossible : '.($this->caisseError ?: 'table ECO_USER_CAISSE indisponible.')], 422);
+        }
         AuditLogger::log('update', "Affectation caisse utilisateur #{$user} -> ".($data['caisse_code'] ?? 'aucune'));
 
+        // Vérifie que l'affectation est bien lue (cohérence avec l'ouverture de caisse).
         return response()->json([
             'message' => 'Affectation enregistrée.',
-            'caisse_code' => $data['caisse_code'] ?? null,
+            'caisse_code' => $this->caisseOf($user),
         ]);
     }
 
@@ -188,7 +227,9 @@ class EstablishmentUserController extends Controller
 
         $role = $data['role'] ?? null;
         if ($role) {
-            DB::connection('economat')->table('ECO_USER_ROLE')->where('USER_ID', $user)->update(['ROLE' => $role]);
+            DB::connection('economat')->table('ECO_USER_ROLE')->updateOrInsert(
+                ['USER_ID' => $user], ['ROLE' => $role]
+            );
         }
         if (array_key_exists('caisse_code', $data)) {
             $this->setCaisse($user, ($role ?? $this->roleOf($user)) === 'caissier' ? ($data['caisse_code'] ?: null) : null);

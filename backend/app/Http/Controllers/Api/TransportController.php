@@ -43,8 +43,11 @@ class TransportController extends Controller
 
     public function grilleUpdate(Request $request, string $grille)
     {
+        if (! ctype_digit((string) $grille)) {
+            return response()->json(['message' => 'Identifiant de tarif invalide.'], 422);
+        }
         $data = $this->grilleRules($request);
-        $g = GrilleTransport::where('Num', $grille)->firstOrFail();
+        $g = GrilleTransport::where('Num', (int) $grille)->firstOrFail();
         $g->ModePaiement = $data['mode'] ?? null;
         $g->CodeNiveau = $data['code_niveau'];
         $g->Montant = $data['montant'];
@@ -57,7 +60,11 @@ class TransportController extends Controller
 
     public function grilleDestroy(string $grille)
     {
-        GrilleTransport::where('Num', $grille)->firstOrFail()->delete();
+        if (! ctype_digit((string) $grille)) {
+            GrilleTransport::whereNull('Num')->delete();
+            return response()->json(['message' => 'Tarif(s) sans identifiant supprimé(s).']);
+        }
+        GrilleTransport::where('Num', (int) $grille)->firstOrFail()->delete();
 
         return response()->json(['message' => 'Tarif supprimé.']);
     }
@@ -67,16 +74,52 @@ class TransportController extends Controller
     public function index(Request $request)
     {
         try {
-            $rows = Transport::forTenant()->with('eleve')
-                ->when($request->search, fn ($q, $s) => $q->where('Matricule', 'like', "%$s%"))
-                ->when($request->immatriculation, fn ($q, $i) => $q->where('Immatriculation', $i))
-                ->orderByDesc('num')
-                ->get()
-                ->map(fn (Transport $t) => $t->toNormalized());
+            // Recherche multi-critères : matricule, nom/prénom, car, destination, période.
+            $q = Transport::forTenant()->with('eleve');
 
-            return response()->json(['data' => $rows->values(), 'total' => $rows->count()]);
+            // Résolution des matricules par nom/prénom (et matricule) si "search" ou "nom".
+            $needle = trim((string) ($request->query('search') ?? $request->query('nom') ?? ''));
+            if ($needle !== '') {
+                $mats = [];
+                try {
+                    $mats = Student::forTenant()->where(function ($x) use ($needle) {
+                        $x->where('Matricule', 'like', "%$needle%")
+                          ->orWhere('Nom', 'like', "%$needle%")
+                          ->orWhere('Prenom', 'like', "%$needle%");
+                    })->pluck('Matricule')->all();
+                } catch (\Throwable $e) {}
+                $q->where(function ($x) use ($needle, $mats) {
+                    $x->where('Matricule', 'like', "%$needle%");
+                    if (! empty($mats)) { $x->orWhereIn('Matricule', $mats); }
+                });
+            }
+
+            $q->when($request->query('matricule'), fn ($x, $m) => $x->where('Matricule', 'like', "%$m%"))
+              ->when($request->query('immatriculation'), fn ($x, $i) => $x->where('Immatriculation', $i))
+              ->when($request->query('date_debut'), fn ($x, $d) => $x->whereDate('DateDebut', '>=', $d))
+              ->when($request->query('date_fin'), fn ($x, $d) => $x->whereDate('DateDebut', '<=', $d));
+
+            // Filtre destination : résout les matricules affectés à cette destination.
+            if ($dest = $request->query('destination_id')) {
+                $mats = [];
+                try {
+                    $mats = \Illuminate\Support\Facades\DB::connection('economat')->table('ECO_TRANSPORT_ELEVE')
+                        ->where('DESTINATION_ID', $dest)->pluck('MATRICULE')->all();
+                } catch (\Throwable $e) {}
+                $q->whereIn('Matricule', $mats ?: ['__none__']);
+            }
+
+            $rows = $q->orderByDesc('num')->get()->map(fn (Transport $t) => $t->toNormalized());
+            $totalPaye = $rows->sum('paye');
+            $totalReste = $rows->sum('reste');
+
+            return response()->json([
+                'data' => $rows->values(),
+                'total' => $rows->count(),
+                'totaux' => ['paye' => $totalPaye, 'reste' => $totalReste],
+            ]);
         } catch (\Throwable $e) {
-            return response()->json(['data' => [], 'total' => 0]);
+            return response()->json(['data' => [], 'total' => 0, 'totaux' => ['paye' => 0, 'reste' => 0]]);
         }
     }
 

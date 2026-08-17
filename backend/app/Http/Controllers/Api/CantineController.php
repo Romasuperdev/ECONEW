@@ -45,8 +45,11 @@ class CantineController extends Controller
 
     public function grilleUpdate(Request $request, string $grille)
     {
+        if (! ctype_digit((string) $grille)) {
+            return response()->json(['message' => 'Identifiant de tarif invalide.'], 422);
+        }
         $data = $this->grilleRules($request);
-        $g = GrilleCantine::forTenant()->where('Num', $grille)->firstOrFail();
+        $g = GrilleCantine::forTenant()->where('Num', (int) $grille)->firstOrFail();
         $g->ModePaiement = $data['mode'] ?? null;
         $g->CodeNiveau = $data['code_niveau'];
         $g->Montant = $data['montant'];
@@ -58,7 +61,11 @@ class CantineController extends Controller
 
     public function grilleDestroy(string $grille)
     {
-        GrilleCantine::forTenant()->where('Num', $grille)->firstOrFail()->delete();
+        if (! ctype_digit((string) $grille)) {
+            GrilleCantine::forTenant()->whereNull('Num')->delete();
+            return response()->json(['message' => 'Tarif(s) sans identifiant supprimé(s).']);
+        }
+        GrilleCantine::forTenant()->where('Num', (int) $grille)->firstOrFail()->delete();
 
         return response()->json(['message' => 'Tarif supprimé.']);
     }

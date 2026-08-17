@@ -8,8 +8,12 @@ use App\Support\AuditLogger;
 use App\Support\EtablissementContext;
 use App\Support\SocieteContext;
 use App\Support\UidRegistry;
+use App\Models\Student;
+use App\Models\Versement;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Remises accordées aux élèves — table ECONOMAT existante T_REMISE_ACCORDEE.
@@ -57,18 +61,37 @@ class RemiseController extends Controller
     public function store(Request $request)
     {
         $data = $this->rules($request);
+        $matricule = (string) ($data['matricule'] ?? '');
+        $type = (string) ($data['type'] ?? ($data['rubrique'] ?? ''));
+
+        // Règle 1 : une seule remise par rubrique et par élève (dans l'année).
+        if ($this->remiseExiste($matricule, $type)) {
+            return response()->json([
+                'message' => "Une remise a déjà été accordée sur la rubrique « $type » pour cet élève. Impossible d'en ajouter une autre.",
+            ], 422);
+        }
+        // Règle 2 : aucune remise si l'élève a déjà payé cette rubrique.
+        if ($this->aPaye($matricule, $type)) {
+            return response()->json([
+                'message' => "Cet élève a déjà effectué un paiement sur la rubrique « $type ». La remise n'est plus permise.",
+            ], 422);
+        }
+
         $payload = $this->payload($data) + [
             'ANNEE' => AnneeContext::current(),
             'CODESOCIETE' => SocieteContext::current(),
             'CODEETABLISSEMENT' => EtablissementContext::current(),
         ];
+        // Traçabilité : auteur de la remise (colonnes ajoutées si absentes).
+        $payload += $this->tracabilite('create');
+
         try {
             $id = DB::connection('economat')->table(self::TABLE)->insertGetId($payload, 'ID');
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Création impossible : '.$e->getMessage()], 422);
         }
         UidRegistry::assign('REMISE', (string) $id);
-        AuditLogger::log('create', 'Remise élève '.($data['matricule'] ?? ''));
+        AuditLogger::log('create', "Remise accordée — élève $matricule, rubrique $type, taux ".($data['taux'] ?? 0)."%, remise ".round(((float)($data['montant']??0))*((float)($data['taux']??0))/100)." (base ".($data['montant']??0).")");
 
         return response()->json(['id' => $id], 201);
     }
@@ -76,22 +99,125 @@ class RemiseController extends Controller
     public function update(Request $request, string $remise)
     {
         $data = $this->rules($request);
+        $matricule = (string) ($data['matricule'] ?? '');
+        $type = (string) ($data['type'] ?? ($data['rubrique'] ?? ''));
+
+        // On empêche de basculer vers une rubrique déjà remisée (hors la ligne courante).
+        if ($this->remiseExiste($matricule, $type, $remise)) {
+            return response()->json([
+                'message' => "Une remise existe déjà sur la rubrique « $type » pour cet élève.",
+            ], 422);
+        }
+        if ($this->aPaye($matricule, $type)) {
+            return response()->json([
+                'message' => "Paiement déjà effectué sur « $type » : la remise ne peut plus être modifiée.",
+            ], 422);
+        }
+
         try {
-            $this->base()->where('ID', $remise)->update($this->payload($data));
+            $this->base()->where('ID', $remise)->update($this->payload($data) + $this->tracabilite('update'));
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Modification impossible : '.$e->getMessage()], 422);
         }
+        AuditLogger::log('update', "Remise modifiée #$remise — élève $matricule, rubrique $type, taux ".($data['taux'] ?? 0).'%');
         return response()->json(['id' => $remise]);
     }
 
     public function destroy(string $remise)
     {
         try {
+            $ref = $this->base()->where('ID', $remise)->first();
             $this->base()->where('ID', $remise)->delete();
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Suppression impossible : '.$e->getMessage()], 422);
         }
+        AuditLogger::log('delete', 'Remise supprimée #'.$remise.($ref ? " — élève {$ref->MATRICULE}, rubrique {$ref->TYPE}" : ''));
         return response()->json(['message' => 'Remise supprimée.']);
+    }
+
+    /**
+     * Éligibilité d'un élève aux remises par rubrique : indique celles déjà
+     * remisées et celles déjà payées (à griser côté interface).
+     */
+    public function eligibilite(Request $request)
+    {
+        $matricule = (string) $request->query('matricule', '');
+        $rubriques = ['Inscription', 'Scolarité', 'Transport', 'Cantine', 'Pension'];
+        $out = [];
+        foreach ($rubriques as $r) {
+            $out[$r] = [
+                'remise_existe' => $matricule !== '' && $this->remiseExiste($matricule, $r),
+                'a_paye' => $matricule !== '' && $this->aPaye($matricule, $r),
+            ];
+        }
+        return response()->json($out);
+    }
+
+    /** Une remise existe-t-elle déjà pour cet élève sur cette rubrique (année en cours) ? */
+    private function remiseExiste(string $matricule, string $type, ?string $exceptId = null): bool
+    {
+        if ($matricule === '' || $type === '') { return false; }
+        try {
+            $q = $this->base()->where('MATRICULE', $matricule)->where('TYPE', $type)
+                ->when(AnneeContext::current(), fn ($x, $a) => $x->where('ANNEE', $a));
+            if ($exceptId !== null) { $q->where('ID', '<>', $exceptId); }
+            return $q->exists();
+        } catch (\Throwable $e) { return false; }
+    }
+
+    /** L'élève a-t-il déjà payé sur cette rubrique ? (bloque la remise) */
+    private function aPaye(string $matricule, string $type): bool
+    {
+        if ($matricule === '') { return false; }
+        $kw = [
+            'scolarité' => 'scolar', 'scolarite' => 'scolar', 'inscription' => 'inscri',
+            'transport' => 'transport', 'cantine' => 'cantine', 'pension' => 'pension',
+        ];
+        $needle = $kw[strtolower($type)] ?? strtolower($type);
+
+        // 1) Versements enregistrés portant sur la rubrique (libellé)
+        try {
+            $cMat = Versement::col(['Matricule', 'MATRICULE', 'CodeEleve', 'CODEELEVE']);
+            $cLib = Versement::col(['Libelle', 'LIBELLE', 'Motif']);
+            $cMont = Versement::col(['Montant', 'MONTANT', 'MONTANT_CFA', 'MontantVerse']);
+            if ($cMat) {
+                $q = Versement::query()->where($cMat, $matricule);
+                if ($cLib) { $q->where($cLib, 'like', "%$needle%"); }
+                if ($cMont) { $q->where($cMont, '>', 0); }
+                if ($q->exists()) { return true; }
+            }
+        } catch (\Throwable $e) {}
+
+        // 2) Pour Scolarité / Inscription : le solde payé de la fiche élève fait foi
+        if (in_array($needle, ['scolar', 'inscri'], true)) {
+            try {
+                $st = Student::where('Matricule', $matricule)->first();
+                if ($st && (float) ($st->TotalPaye ?? 0) > 0) { return true; }
+            } catch (\Throwable $e) {}
+        }
+        return false;
+    }
+
+    /** Colonnes de traçabilité, ajoutées uniquement si elles existent dans la table. */
+    private function tracabilite(string $action): array
+    {
+        $out = [];
+        try {
+            $cols = Schema::connection('economat')->getColumnListing(self::TABLE);
+            $user = Auth::user();
+            $who = $user?->getAttribute('Login') ?? ($user?->name ?? (string) $user?->getKey());
+            $set = function (array $cands, $val) use (&$out, $cols) {
+                foreach ($cands as $c) { if (in_array($c, $cols, true)) { $out[$c] = $val; return; } }
+            };
+            if ($action === 'create') {
+                $set(['CREE_PAR', 'CREEPAR', 'CREATED_BY', 'UTILISATEUR', 'USER_LOGIN'], $who);
+                $set(['DATE_CREATION', 'CREATED_AT'], now());
+            } else {
+                $set(['MODIFIE_PAR', 'MODIFIEPAR', 'UPDATED_BY'], $who);
+                $set(['DATE_MODIF', 'UPDATED_AT'], now());
+            }
+        } catch (\Throwable $e) {}
+        return $out;
     }
 
     /** Construit les colonnes de la table à partir des entrées + calculs. */

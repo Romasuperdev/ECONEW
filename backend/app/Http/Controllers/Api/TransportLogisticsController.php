@@ -59,7 +59,6 @@ class TransportLogisticsController extends Controller
         $b->Marque = $d['marque'] ?? null;
         $b->MODELE = $d['modele'] ?? null;
         $b->Conducteur = $d['conducteur'] ?? null;
-        $b->Itineraire = $d['itineraire'] ?? null;
         $b->Destination = $d['destination'] ?? null;
         $b->NbrPlace = $d['nb_places'] ?? null;
         $b->NbrPlaceOccup = $d['nb_places_occupees'] ?? null;
@@ -75,7 +74,6 @@ class TransportLogisticsController extends Controller
             'marque' => ['nullable', 'string'],
             'modele' => ['nullable', 'string'],
             'conducteur' => ['nullable', 'string'],
-            'itineraire' => ['nullable', 'string'],
             'destination' => ['nullable', 'string'],
             'nb_places' => ['nullable', 'integer'],
             'nb_places_occupees' => ['nullable', 'integer'],
@@ -93,11 +91,8 @@ class TransportLogisticsController extends Controller
             $extras = $this->allChauffeurExtras();
             return response()->json(Chauffeur::forTenant()->orderBy('NOM')->get()
                 ->map(function (Chauffeur $c) use ($extras) {
-                    $n = $c->toNormalized();
                     $e = $extras[(string) $c->ID] ?? null;
-                    $n['type_permis'] = $e->TYPE_PERMIS ?? null;
-                    $n['photo'] = $e->PHOTO ?? null;
-                    return $n;
+                    return $this->mergeExtra($c->toNormalized(), $e);
                 })->values());
         } catch (\Throwable $e) {
             return response()->json([]);
@@ -137,12 +132,30 @@ class TransportLogisticsController extends Controller
     private function ensureChauffeurExtra(): bool
     {
         try {
-            if (! Schema::connection('economat')->hasTable('ECO_CHAUFFEUR_EXTRA')) {
-                Schema::connection('economat')->create('ECO_CHAUFFEUR_EXTRA', function ($t) {
+            $conn = Schema::connection('economat');
+            if (! $conn->hasTable('ECO_CHAUFFEUR_EXTRA')) {
+                $conn->create('ECO_CHAUFFEUR_EXTRA', function ($t) {
                     $t->increments('id');
                     $t->string('CHAUFFEUR_ID', 50);
                     $t->string('TYPE_PERMIS', 50)->nullable();
                     $t->text('PHOTO')->nullable();
+                    $t->string('SEXE', 20)->nullable();
+                    $t->string('DATE_DELIV', 30)->nullable();
+                    $t->string('DATE_EXP', 30)->nullable();
+                    $t->string('STATUT', 30)->nullable();
+                    $t->dateTime('CREATED_AT')->nullable();
+                });
+                return true;
+            }
+            // Ajout tolérant des colonnes manquantes.
+            $cols = array_map('strtoupper', $conn->getColumnListing('ECO_CHAUFFEUR_EXTRA'));
+            $add = array_diff(['SEXE', 'DATE_DELIV', 'DATE_EXP', 'STATUT', 'CREATED_AT'], $cols);
+            if (! empty($add)) {
+                $conn->table('ECO_CHAUFFEUR_EXTRA', function ($t) use ($add) {
+                    foreach ($add as $col) {
+                        if ($col === 'CREATED_AT') { $t->dateTime($col)->nullable(); }
+                        else { $t->string($col, 30)->nullable(); }
+                    }
                 });
             }
             return true;
@@ -153,13 +166,34 @@ class TransportLogisticsController extends Controller
     {
         if (! $this->ensureChauffeurExtra()) { return; }
         try {
-            DB::connection('economat')->table('ECO_CHAUFFEUR_EXTRA')->where('CHAUFFEUR_ID', (string) $id)->delete();
+            $table = DB::connection('economat')->table('ECO_CHAUFFEUR_EXTRA');
+            // Préserve la date de création existante.
+            $prev = $table->where('CHAUFFEUR_ID', (string) $id)->value('CREATED_AT');
+            $table->where('CHAUFFEUR_ID', (string) $id)->delete();
             DB::connection('economat')->table('ECO_CHAUFFEUR_EXTRA')->insert([
                 'CHAUFFEUR_ID' => (string) $id,
                 'TYPE_PERMIS' => $d['type_permis'] ?? null,
                 'PHOTO' => $d['photo'] ?? null,
+                'SEXE' => $d['sexe'] ?? null,
+                'DATE_DELIV' => $d['date_delivrance'] ?? null,
+                'DATE_EXP' => $d['date_expiration'] ?? null,
+                'STATUT' => $d['statut'] ?? null,
+                'CREATED_AT' => $prev ?: now(),
             ]);
         } catch (\Throwable $e) {}
+    }
+
+    /** Fusionne les champs "extra" dans la représentation normalisée. */
+    private function mergeExtra(array $n, $e): array
+    {
+        $n['type_permis'] = $e->TYPE_PERMIS ?? null;
+        $n['photo'] = $e->PHOTO ?? null;
+        $n['sexe'] = $e->SEXE ?? null;
+        $n['date_delivrance'] = $e->DATE_DELIV ?? null;
+        $n['date_expiration'] = $e->DATE_EXP ?? null;
+        $n['statut'] = $e->STATUT ?? null;
+        $n['created_at'] = $e->CREATED_AT ?? null;
+        return $n;
     }
 
     private function allChauffeurExtras()
@@ -173,9 +207,7 @@ class TransportLogisticsController extends Controller
     private function withExtra(array $n): array
     {
         $e = $this->allChauffeurExtras()[(string) ($n['id'] ?? '')] ?? null;
-        $n['type_permis'] = $e->TYPE_PERMIS ?? null;
-        $n['photo'] = $e->PHOTO ?? null;
-        return $n;
+        return $this->mergeExtra($n, $e);
     }
 
     private function fillChauffeur(Chauffeur $c, array $d): void
@@ -201,6 +233,10 @@ class TransportLogisticsController extends Controller
             'num_permis' => ['nullable', 'string', 'max:50'],
             'type_permis' => ['nullable', 'string', 'max:50'],
             'photo' => ['nullable', 'string'],
+            'sexe' => ['nullable', 'string', 'max:20'],
+            'date_delivrance' => ['nullable', 'string', 'max:30'],
+            'date_expiration' => ['nullable', 'string', 'max:30'],
+            'statut' => ['nullable', 'string', 'max:30'],
         ]);
     }
 

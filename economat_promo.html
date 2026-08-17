@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Economat — Spot publicitaire (70s)</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+<style>
+  :root {
+    --g: #00CC8E;
+    --g2: #00A876;
+    --dark: #063d2b;
+    --soft: #E5FFF7;
+    --ink: #0c2c21;
+    --gold: #F5B301;
+    --red: #e5484d;
+    --font: 'DM Sans', system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; font-family: var(--font); }
+
+  html, body {
+    background: #0a1512;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    min-height: 100vh;
+    padding: 16px;
+  }
+
+  .stage {
+    position: relative;
+    width: min(92vw, 405px);
+    aspect-ratio: 9/16;
+    border-radius: 26px;
+    overflow: hidden;
+    background: radial-gradient(120% 80% at 50% 0%, #0d5b40 0%, #063d2b 55%, #04271b 100%);
+    box-shadow: 0 30px 80px rgba(0,0,0,.55);
+    color: #fff;
+    isolation: isolate;
+  }
+
+  .scene {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 30px 24px;
+    text-align: center;
+    transition: opacity .5s ease;
+  }
+
+  .scene.on { opacity: 1; }
+  .scene.on .up { animation: up .7s cubic-bezier(.2,.7,.2,1) both; }
+  .scene.on .up2 { animation: up .7s .12s cubic-bezier(.2,.7,.2,1) both; }
+  .scene.on .up3 { animation: up .7s .24s cubic-bezier(.2,.7,.2,1) both; }
+  .scene.on .up4 { animation: up .7s .36s cubic-bezier(.2,.7,.2,1) both; }
+  .scene.on .pop { animation: pop .6s .1s cubic-bezier(.2,.9,.2,1) both; }
+  .scene.on .zoom { animation: zoom 9s linear both; }
+
+  @keyframes up {
+    from { opacity: 0; transform: translateY(24px); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes pop {
+    from { opacity: 0; transform: scale(.82); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes floaty {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+  @keyframes zoom {
+    from { transform: scale(1); }
+    to { transform: scale(1.12); }
+  }
+
+  .stage::before {
+    content: "";
+    position: absolute;
+    width: 520px;
+    height: 520px;
+    left: -160px;
+    top: -160px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(0,204,142,.35), transparent 60%);
+    filter: blur(6px);
+    z-index: 0;
+  }
+
+  /* Photo réelle en fond de scène */
+  .photo-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+  }
+  .photo-bg img {
+    width: 100%; height: 100%; object-fit: cover;
+    filter: saturate(1.05) brightness(.55);
+  }
+  .photo-bg::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(6,20,15,.35) 0%, rgba(4,20,14,.55) 45%, rgba(4,20,14,.92) 100%);
+  }
+
+  .kicker { font-size: 11px; font-weight: 800; letter-spacing: 2.5px; text-transform: uppercase; color: var(--g); opacity: .9; margin-bottom: 12px; }
+  .h1 { font-size: 30px; line-height: 1.1; font-weight: 900; letter-spacing: -.5px; }
+  .h1 .hl { color: var(--g); }
+  .sub { font-size: 14px; color: #bfe9d8; margin-top: 12px; font-weight: 500; max-width: 320px; line-height: 1.4; }
+
+  .user-badge {
+    display: flex; align-items: center; gap: 10px;
+    background: rgba(255,255,255,.12); backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,.2); border-radius: 50px;
+    padding: 6px 14px 6px 8px; margin-bottom: 14px;
+  }
+  .user-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--g); color: #06301f; display: grid; place-items: center; font-weight: 900; font-size: 14px; overflow: hidden; }
+  .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .user-info { text-align: left; }
+  .user-info b { display: block; font-size: 12px; color: #fff; }
+  .user-info span { display: block; font-size: 10px; color: #bfe9d8; }
+
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 26px; }
+  .logo .mark {
+    width: 44px; height: 44px; border-radius: 13px;
+    background: linear-gradient(135deg, var(--g), #00e6a0);
+    display: grid; place-items: center; color: #06301f;
+    font-size: 24px; box-shadow: 0 8px 24px rgba(0,204,142,.5);
+  }
+
+  .app {
+    width: 100%; background: #f4fffb; border-radius: 20px;
+    padding: 14px; color: var(--ink); box-shadow: 0 20px 50px rgba(0,0,0,.4); text-align: left;
+  }
+  .app .top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .app .top b { font-size: 14px; color: var(--dark); }
+  .badge { background: var(--soft); color: var(--g2); font-size: 10px; font-weight: 800; padding: 4px 8px; border-radius: 999px; }
+
+  .kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .kpi { background: #fff; border: 1px solid #e4f3ec; border-radius: 12px; padding: 9px 10px; }
+  .kpi .l { font-size: 9.5px; color: #6b8079; font-weight: 700; }
+  .kpi .v { font-size: 16px; font-weight: 900; color: var(--dark); margin-top: 2px; }
+  .kpi.green .v { color: var(--g2); }
+  .kpi.red .v { color: var(--red); }
+  .kpi.gold .v { color: #c98a00; }
+
+  .bars { display: flex; align-items: flex-end; gap: 6px; height: 50px; margin-top: 10px; padding: 0 2px; }
+  .bars i { flex: 1; background: linear-gradient(180deg, var(--g), #00a876); border-radius: 4px 4px 0 0; height: 20%; }
+
+  .row { display: flex; align-items: center; justify-content: space-between; padding: 8px 2px; border-top: 1px solid #eef4f0; font-size: 11.5px; }
+  .row:first-child { border-top: 0; }
+  .pill { font-size: 9.5px; font-weight: 800; padding: 3px 7px; border-radius: 999px; }
+  .pill.ok { background: #e6f6ec; color: #1b7a37; }
+  .pill.wait { background: #fdecec; color: #b23b28; }
+
+  .recu { width: 100%; background: #fff; border-radius: 16px; color: var(--ink); padding: 14px; box-shadow: 0 20px 40px rgba(0,0,0,.35); text-align: left; }
+  .recu h4 { color: var(--g2); font-size: 13px; text-align: center; border-bottom: 1.5px solid var(--soft); padding-bottom: 6px; margin-bottom: 6px; }
+  .recu .l { display: flex; justify-content: space-between; font-size: 11.5px; margin: 4px 0; }
+  .recu .tot { display: flex; justify-content: space-between; font-weight: 900; border-top: 1.5px solid var(--g); margin-top: 6px; padding-top: 6px; color: var(--dark); }
+
+  .notif {
+    margin-top: 10px; background: #e7f8ef; border: 1px solid #00cc8e; border-radius: 12px;
+    padding: 10px; text-align: left; font-size: 11px; color: var(--dark); display: flex; align-items: center; gap: 8px;
+  }
+  .notif-icon { width: 24px; height: 24px; background: #25D366; color: #fff; border-radius: 50%; display: grid; place-items: center; font-size: 12px; flex: none; }
+
+  .checkline {
+    display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,.1);
+    border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 11px 13px;
+    width: 100%; max-width: 330px; margin: 6px 0; font-size: 13.5px; font-weight: 600; text-align: left;
+  }
+  .checkline .c { width: 24px; height: 24px; border-radius: 50%; background: var(--g); color: #06301f; display: grid; place-items: center; font-weight: 900; flex: none; font-size: 12px; }
+
+  .devices { display: flex; align-items: flex-end; justify-content: center; gap: 10px; margin-top: 10px; }
+  .device { background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.25); border-radius: 10px; display: grid; place-items: center; font-size: 20px; }
+  .device.phone { width: 40px; height: 74px; border-radius: 10px; }
+  .device.tablet { width: 62px; height: 84px; }
+  .device.pc { width: 96px; height: 66px; }
+
+  .cta-btn {
+    margin-top: 16px; background: var(--g); color: #06301f; font-weight: 900;
+    font-size: 15px; padding: 13px 24px; border-radius: 14px;
+    box-shadow: 0 12px 30px rgba(0,204,142,.5); animation: floaty 2.2s ease-in-out infinite;
+  }
+  .contact { margin-top: 12px; font-size: 12.5px; color: #bfe9d8; font-weight: 600; line-height: 1.6; }
+
+  .caption { position: absolute; left: 0; right: 0; bottom: 14px; z-index: 5; display: flex; justify-content: center; padding: 0 18px; }
+  .caption span {
+    background: rgba(4,32,22,.85); backdrop-filter: blur(4px); color: #eafff7;
+    font-size: 12px; font-weight: 600; padding: 8px 12px; border-radius: 10px;
+    max-width: 350px; line-height: 1.35;
+  }
+
+  .prog { position: absolute; top: 0; left: 0; height: 4px; background: var(--g); width: 0; z-index: 6; box-shadow: 0 0 12px var(--g); }
+  .brandtag { position: absolute; top: 14px; left: 14px; z-index: 5; display: flex; align-items: center; gap: 7px; font-weight: 900; font-size: 14px; opacity: .95; }
+  .brandtag .m { width: 24px; height: 24px; border-radius: 7px; background: linear-gradient(135deg,var(--g),#00e6a0); display: grid; place-items: center; color: #06301f; font-size: 14px; }
+
+  .startgate {
+    position: absolute; inset: 0; z-index: 20; background: rgba(3,15,11,.92);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; text-align: center; padding: 30px;
+  }
+  .startgate .mark { width: 60px; height: 60px; border-radius: 16px; background: linear-gradient(135deg, var(--g), #00e6a0); display: grid; place-items: center; color: #06301f; font-weight: 900; font-size: 30px; }
+  .startgate h2 { font-size: 20px; font-weight: 900; }
+  .startgate p { font-size: 12.5px; color: #bfe9d8; max-width: 280px; }
+  .startbtn {
+    margin-top: 6px; background: var(--g); color: #06301f; font-weight: 900; font-size: 15px;
+    padding: 14px 26px; border-radius: 14px; border: none; cursor: pointer;
+    box-shadow: 0 12px 30px rgba(0,204,142,.5);
+  }
+
+  .ctrls { display: flex; gap: 10px; }
+  .ctrls button { background: #123; color: #cfe; border: 1px solid #2a4a3f; padding: 10px 16px; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 13px; }
+  .ctrls button:hover { background: #1c3a30; }
+  .hint { color: #5f8377; font-size: 12px; max-width: 405px; text-align: center; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+  <div class="stage" id="stage">
+    <div class="prog" id="prog"></div>
+    <div class="brandtag"><span class="m">₵</span> Economat</div>
+
+    <!-- Portail de démarrage : nécessaire pour activer le son (voix + musique) -->
+    <div class="startgate" id="startgate">
+      <div class="mark">₵</div>
+      <h2>Economat — Spot 70s</h2>
+      <p>Activez le son : voix off masculine + musique de fond motivante se lancent automatiquement.</p>
+      <button class="startbtn" onclick="startAll()">▶ Lancer la vidéo avec le son</button>
+    </div>
+
+    <section class="scene" data-i="0">
+      <div class="kicker up">Gestion scolaire &amp; économat</div>
+      <div class="h1 up2">Fini les <span class="hl">erreurs de calcul</span><br>et les papiers perdus.</div>
+      <div class="sub up3">Découvrez Economat, la solution qui simplifie la gestion financière de votre école.</div>
+    </section>
+
+    <section class="scene" data-i="1">
+      <div class="photo-bg"><img src="https://images.pexels.com/photos/6325892/pexels-photo-6325892.jpeg?auto=compress&cs=tinysrgb&w=800" alt="Comptable utilisant Economat"></div>
+      <div class="user-badge up">
+        <div class="user-avatar">💼</div>
+        <div class="user-info"><b>M. Yao · Comptable</b><span>Encaissements en temps réel</span></div>
+      </div>
+      <div class="app up2">
+        <div class="top"><b>Caisse du jour</b><span class="badge">Live</span></div>
+        <div class="kpis">
+          <div class="kpi green"><div class="l">ENCAISSÉ AUJOURD'HUI</div><div class="v" data-count="1285000" data-suffix=" F">0 F</div></div>
+          <div class="kpi gold"><div class="l">EN ATTENTE</div><div class="v" data-count="342000" data-suffix=" F">0 F</div></div>
+        </div>
+        <div class="bars"><i style="--h:45%"></i><i style="--h:62%"></i><i style="--h:38%"></i><i style="--h:78%"></i><i style="--h:56%"></i><i style="--h:90%"></i></div>
+      </div>
+    </section>
+
+    <section class="scene" data-i="2">
+      <div class="photo-bg"><img src="https://images.pexels.com/photos/5991144/pexels-photo-5991144.jpeg?auto=compress&cs=tinysrgb&w=800" alt="Parent recevant une notification"></div>
+      <div class="user-badge up">
+        <div class="user-avatar">👨‍👩‍👧</div>
+        <div class="user-info"><b>Espace Parents</b><span>Notification SMS &amp; WhatsApp instantanée</span></div>
+      </div>
+      <div class="recu pop">
+        <h4>REÇU DE PAIEMENT N°842</h4>
+        <div class="l"><span>Élève :</span><b>KONE Awa (6ème A)</b></div>
+        <div class="l"><span>Frais de scolarité :</span><span>150 000 F</span></div>
+        <div class="l"><span>Cantine &amp; Bus :</span><span>45 000 F</span></div>
+        <div class="tot"><span>Total Payé :</span><span>195 000 F</span></div>
+      </div>
+      <div class="notif up3">
+        <div class="notif-icon">✓</div>
+        <div>Reçu transmis instantanément par <b>SMS &amp; WhatsApp</b> au tuteur.</div>
+      </div>
+    </section>
+
+    <section class="scene" data-i="3">
+      <div class="photo-bg"><img src="https://images.pexels.com/photos/8145247/pexels-photo-8145247.jpeg?auto=compress&cs=tinysrgb&w=800" alt="Équipe suivant les paiements"></div>
+      <div class="kicker up">Suivi &amp; Relances automatiques</div>
+      <div class="app up2">
+        <div class="top"><b>Liste des impayés</b><span class="badge">Relance 1-clic</span></div>
+        <div class="row"><span>DIALLO Ibrahim (5ème)</span><span class="pill wait">Reste 90 000 F</span></div>
+        <div class="row"><span>YAO Marie (4ème B)</span><span class="pill ok">À jour</span></div>
+        <div class="row"><span>TRAORÉ Sékou (3ème)</span><span class="pill wait">Reste 60 000 F</span></div>
+        <div class="row"><span>KOUASSI Jean (Terminale)</span><span class="pill wait">Reste 120 000 F</span></div>
+      </div>
+      <div class="sub up3">Aperçu en un coup d'œil des restes à payer avec rappels automatiques.</div>
+    </section>
+
+    <section class="scene" data-i="4">
+      <div class="photo-bg"><img src="https://images.pexels.com/photos/7752846/pexels-photo-7752846.jpeg?auto=compress&cs=tinysrgb&w=800" alt="Directeur pilotant son établissement"></div>
+      <div class="user-badge up">
+        <div class="user-avatar">📊</div>
+        <div class="user-info"><b>M. Kouadio · Directeur</b><span>Pilote l'établissement en toute sécurité</span></div>
+      </div>
+      <div class="checkline up"><span class="c">✓</span> Bilan financier automatisé et clair</div>
+      <div class="checkline up2"><span class="c">✓</span> Gestion des salaires &amp; dépenses</div>
+      <div class="checkline up3"><span class="c">✓</span> Accessible sur Téléphone, Tablette &amp; PC</div>
+      <div class="devices up4">
+        <div class="device phone">📱</div>
+        <div class="device tablet">🖥️</div>
+        <div class="device pc">💻</div>
+      </div>
+    </section>
+
+    <section class="scene" data-i="5">
+      <div class="logo pop"><span class="mark">₵</span> Economat</div>
+      <div class="sub up2" style="font-size:16px;color:#eafff7;margin-top:14px">
+        Prenez le contrôle des finances de votre école dès aujourd'hui !
+      </div>
+      <div class="cta-btn">Demandez une Démo Gratuite</div>
+      <div class="contact up3">📞 +225 00 00 00 00 · 🌐 economat.ci<br>AURIAK TECHNOLOGY</div>
+    </section>
+
+    <div class="caption"><span id="cap"></span></div>
+  </div>
+
+  <div class="ctrls">
+    <button onclick="play()">▶ Rejouer (70s)</button>
+    <button onclick="toggleMusic()" id="musicBtn">🔊 Musique : ON</button>
+    <button onclick="document.getElementById('stage').requestFullscreen()">⛶ Plein écran</button>
+  </div>
+  <div class="hint">Cliquez sur "Lancer la vidéo avec le son" pour démarrer voix off + musique en même temps (obligatoire pour l'autoplay audio des navigateurs).</div>
+
+<script>
+  // Timeline ~70 secondes (70 000 ms)
+  const scenes = [
+    [7000,  "Simplifiez la gestion financière de votre école et dites adieu aux erreurs de calcul et aux papiers perdus."],
+    [10000, "Grâce à Economat, vos comptables enregistrent les encaissements et suivent la caisse en temps réel, où qu'ils soient."],
+    [11000, "Chaque paiement génère un reçu officiel, transmis instantanément aux parents par SMS et WhatsApp."],
+    [11000, "Identifiez immédiatement les retards de paiement et lancez des relances automatiques en un seul clic."],
+    [12000, "Les directeurs pilotent leur établissement en toute sérénité, avec des rapports clairs, accessibles sur téléphone, tablette et ordinateur."],
+    [11000, "Optez pour Economat dès aujourd'hui. Contactez AURIAK TECHNOLOGY pour réserver votre démonstration gratuite !"]
+  ];
+
+  const secs = [...document.querySelectorAll('.scene')];
+  const cap = document.getElementById('cap');
+  const prog = document.getElementById('prog');
+  let timers = [];
+  const total = scenes.reduce((s,x) => s + x[0], 0);
+
+  // ---------- Voix off masculine ----------
+  const synth = window.speechSynthesis;
+  let maleFrenchVoice = null;
+
+  function loadVoices() {
+    if (!synth) return;
+    const voices = synth.getVoices();
+    const maleNames = ['thomas', 'paul', 'henri', 'nicolas', 'gilles', 'mathieu', 'françois', 'male', 'homme', 'natural'];
+    maleFrenchVoice = voices.find(v => v.lang.toLowerCase().includes('fr') && maleNames.some(n => v.name.toLowerCase().includes(n)));
+    if (!maleFrenchVoice) maleFrenchVoice = voices.find(v => v.lang.toLowerCase().includes('fr'));
+  }
+  loadVoices();
+  if (synth && synth.onvoiceschanged !== undefined) synth.onvoiceschanged = loadVoices;
+
+  function speak(text) {
+    if (!synth) return;
+    synth.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'fr-FR';
+    u.rate = 0.90;
+    u.pitch = 0.85;
+    if (maleFrenchVoice) u.voice = maleFrenchVoice;
+    synth.speak(u);
+  }
+
+  // ---------- Musique de fond motivante (générée avec Tone.js, aucun fichier externe requis) ----------
+  let musicOn = true;
+  let musicStarted = false;
+  let pad, pluck, kick, hat, loopId;
+
+  function buildMusic() {
+    if (musicStarted) return;
+    musicStarted = true;
+
+    const reverb = new Tone.Reverb({ decay: 3, wet: 0.35 }).toDestination();
+    const musicBus = new Tone.Volume(-16).connect(reverb);
+
+    pad = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.6, decay: 0.3, sustain: 0.6, release: 1.4 }
+    }).connect(musicBus);
+
+    pluck = new Tone.Synth({
+      oscillator: { type: 'sine' },
+      envelope: { attack: 0.01, decay: 0.25, sustain: 0.05, release: 0.3 }
+    }).connect(new Tone.Volume(-10).connect(reverb));
+
+    kick = new Tone.MembraneSynth({ octaves: 4, pitchDecay: 0.05 }).connect(new Tone.Volume(-14).toDestination());
+    hat = new Tone.NoiseSynth({ envelope: { attack: 0.001, decay: 0.05, sustain: 0 } }).connect(new Tone.Volume(-26).toDestination());
+
+    Tone.Transport.bpm.value = 96;
+
+    // Progression motivante : Cmaj7 - Am7 - Fmaj7 - G
+    const chords = [
+      ['C4','E4','G4','B4'],
+      ['A3','C4','E4','G4'],
+      ['F3','A3','C4','E4'],
+      ['G3','B3','D4','F4']
+    ];
+    const arpNotes = ['C5','E5','G5','B5','A4','C5','E5','G5','F4','A4','C5','E5','G4','B4','D5','F5'];
+
+    let bar = 0;
+    loopId = new Tone.Loop((time) => {
+      const chord = chords[bar % chords.length];
+      pad.triggerAttackRelease(chord, '1m', time);
+      kick.triggerAttackRelease('C2', '8n', time);
+      kick.triggerAttackRelease('C2', '8n', time + Tone.Time('2n').toSeconds());
+      hat.triggerAttackRelease('16n', time + Tone.Time('4n').toSeconds());
+      hat.triggerAttackRelease('16n', time + Tone.Time('4n').toSeconds() * 3);
+      for (let i = 0; i < 4; i++) {
+        const note = arpNotes[(bar * 4 + i) % arpNotes.length];
+        pluck.triggerAttackRelease(note, '8n', time + i * Tone.Time('4n').toSeconds());
+      }
+      bar++;
+    }, '1m').start(0);
+
+    Tone.Transport.start();
+  }
+
+  function toggleMusic() {
+    musicOn = !musicOn;
+    document.getElementById('musicBtn').textContent = musicOn ? '🔊 Musique : ON' : '🔇 Musique : OFF';
+    if (Tone) Tone.Destination.mute = !musicOn;
+  }
+
+  async function startAll() {
+    document.getElementById('startgate').style.display = 'none';
+    if (typeof Tone !== 'undefined') {
+      await Tone.start();
+      buildMusic();
+    }
+    play();
+  }
+
+  // ---------- Animation des scènes ----------
+  function clearAll(){
+    timers.forEach(clearTimeout);
+    timers = [];
+    if (synth) synth.cancel();
+  }
+
+  const easeP = p => p * p * (3 - 2 * p);
+
+  function animateCounts(scene){
+    scene.querySelectorAll('[data-count]').forEach(el => {
+      const end = +el.dataset.count;
+      const suf = el.dataset.suffix || '';
+      const dur = 1200;
+      let t0 = null;
+      function step(ts){
+        if (!t0) t0 = ts;
+        const p = Math.min((ts - t0) / dur, 1);
+        el.textContent = Math.floor(end * easeP(p)).toLocaleString('fr-FR') + suf;
+        if (p < 1) requestAnimationFrame(step);
+        else el.textContent = end.toLocaleString('fr-FR') + suf;
+      }
+      requestAnimationFrame(step);
+    });
+    scene.querySelectorAll('.bars i').forEach((b, i) => {
+      b.style.height = '6%';
+      setTimeout(() => {
+        b.style.transition = 'height .8s cubic-bezier(.2,.8,.2,1)';
+        b.style.height = b.style.getPropertyValue('--h');
+      }, 120 + i * 70);
+    });
+  }
+
+  function play(){
+    clearAll();
+    secs.forEach(s => s.classList.remove('on'));
+
+    let acc = 0;
+    scenes.forEach((sc, idx) => {
+      timers.push(setTimeout(() => {
+        secs.forEach(s => s.classList.remove('on'));
+        const el = secs[idx];
+        el.classList.add('on');
+        cap.textContent = sc[1];
+        speak(sc[1]);
+        animateCounts(el);
+      }, acc));
+      acc += sc[0];
+    });
+
+    prog.style.transition = 'none';
+    prog.style.width = '0';
+    requestAnimationFrame(() => {
+      prog.style.transition = 'width ' + total + 'ms linear';
+      prog.style.width = '100%';
+    });
+
+    timers.push(setTimeout(play, total + 600));
+  }
+</script>
+</body>
+</html>

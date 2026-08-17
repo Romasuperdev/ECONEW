@@ -59,8 +59,9 @@ export function AuthProvider({ children }) {
 
   const can = (ability) => {
     if (!user) return false
-    if (user.role === 'super_admin') return true
-    return Array.isArray(user.abilities) && user.abilities.includes(ability)
+    if (user.role === 'super_admin' || user.role === 'directeur') return true
+    if (!Array.isArray(user.abilities)) return false
+    return user.abilities.includes('*') || user.abilities.includes(ability)
   }
 
   return (

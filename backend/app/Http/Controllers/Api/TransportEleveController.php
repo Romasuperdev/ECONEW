@@ -72,6 +72,22 @@ class TransportEleveController extends Controller
     {
         $data = $this->rules($request);
         if (! $this->ensure()) return response()->json(['message' => 'Table indisponible.'], 422);
+
+        // Règle : une seule inscription transport par élève et par année scolaire.
+        // Si l'élève est déjà inscrit sur l'année en cours, on refuse (pas de réinscription en double).
+        $annee = AnneeContext::current();
+        try {
+            $deja = $this->base()->where('MATRICULE', $data['matricule'])
+                ->when($annee, fn ($q, $a) => $q->where('ANNEE', $a))
+                ->exists();
+            if ($deja) {
+                return response()->json([
+                    'message' => "Cet élève est déjà inscrit au transport pour l'année scolaire ".($annee ?: 'en cours').". La réinscription n'est possible qu'une fois par année.",
+                    'deja_inscrit' => true,
+                ], 422);
+            }
+        } catch (\Throwable $e) {}
+
         try {
             $id = DB::connection('economat')->table(self::TABLE)->insertGetId([
                 'DATE' => $data['date'] ?? now()->format('Y-m-d'),

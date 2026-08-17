@@ -4,33 +4,33 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Palette officielle Economat
+        // Palette officielle Economat — Vert menthe
         brand: {
-          50: '#EAF1F8',   // fond clair / cartes
-          100: '#d6e3f0',
-          200: '#aec6e0',
-          300: '#7f9fc6',
-          400: '#4f6f9e',
-          500: '#324f7d',
-          600: '#25406e',
-          700: '#1f335a',
-          800: '#1b2a4a',  // primaire
-          900: '#141f37',
+          50: '#E5FFF7',   // fond clair / cartes (vert pâle)
+          100: '#C7F5E7',
+          200: '#9CEBD1',
+          300: '#66DDB6',
+          400: '#33D3A2',
+          500: '#00CC8E',  // principal
+          600: '#00B37D',
+          700: '#009A6B',
+          800: '#007E58',  // primaire foncé
+          900: '#05543C',
         },
         gold: {
-          DEFAULT: '#D9A441',
-          50: '#fbf4e4',
-          100: '#f3e0b8',
-          400: '#e2b661',
-          500: '#D9A441',  // accent / CTA
-          600: '#c28c2c',
-          700: '#9c6f22',
+          DEFAULT: '#00CC8E',
+          50: '#E5FFF7',
+          100: '#C7F5E7',
+          400: '#33D3A2',
+          500: '#00CC8E',  // accent / CTA
+          600: '#00B37D',
+          700: '#009A6B',
         },
         turquoise: {
-          DEFAULT: '#2E9C9C',
-          400: '#3fb6b6',
-          500: '#2E9C9C',  // liens / icônes actives
-          600: '#26807f',
+          DEFAULT: '#009A6B',
+          400: '#33D3A2',
+          500: '#009A6B',  // liens / icônes actives
+          600: '#007E58',
         },
         ink: '#5A6B7B',    // texte secondaire
       },

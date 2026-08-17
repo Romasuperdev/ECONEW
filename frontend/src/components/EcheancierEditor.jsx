@@ -14,6 +14,7 @@ export default function EcheancierEditor({ nb, lines, setLines }) {
     })
   }, [nb]) // eslint-disable-line
 
+  const ordinal = (n) => `${n === 1 ? '1er' : `${n}e`} Versement`
   const setLine = (i, k, v) => setLines((prev) => prev.map((l, j) => j === i ? { ...l, [k]: v } : l))
   const total = (lines || []).reduce((s, l) => s + Number(l.montant || 0), 0)
 
@@ -26,7 +27,7 @@ export default function EcheancierEditor({ nb, lines, setLines }) {
         <tbody>
           {lines.map((l, i) => (
             <tr key={i} className="border-t">
-              <td className="px-3 py-1.5 font-medium">N° {l.num}</td>
+              <td className="px-3 py-1.5 font-medium">{ordinal(l.num)}</td>
               <td><Input type="number" value={l.montant} onChange={(e) => setLine(i, 'montant', e.target.value)} /></td>
               <td><Input type="date" value={l.date || ''} onChange={(e) => setLine(i, 'date', e.target.value)} /></td>
             </tr>

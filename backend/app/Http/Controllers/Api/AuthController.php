@@ -126,6 +126,21 @@ class AuthController extends Controller
 
     private function issueToken(RhUser $user)
     {
+        // Blocage si la (les) société(s) de l'utilisateur sont suspendues.
+        // Le super administrateur n'est jamais bloqué.
+        if (! $user->isSuperAdmin()) {
+            $codes = $user->allowedSocieteCodes();
+            if (! empty($codes)) {
+                $suspendues = \App\Models\Societe::suspendedCodes();
+                $actives = array_values(array_diff($codes, $suspendues));
+                if (empty($actives)) {
+                    return response()->json([
+                        'message' => "Accès suspendu : votre établissement est temporairement suspendu. Merci de contacter l'administrateur de la plateforme.",
+                    ], 403);
+                }
+            }
+        }
+
         $token = $user->createToken('api')->plainTextToken;
 
         Auth::setUser($user);

@@ -24,6 +24,7 @@ const P = {
   sunny: <><circle cx="12" cy="12" r="3.5"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5 5l1.4 1.4M17.6 17.6 19 19M5 19l1.4-1.4M17.6 6.4 19 5"/></>,
   search: <><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></>,
   plus: <><path d="M12 5v14M5 12h14"/></>,
+  menu: <><path d="M4 6h16M4 12h16M4 18h16"/></>,
   cantine: <><path d="M4 11h16a8 8 0 0 1-16 0Z"/><path d="M12 3v4M9 5h6"/></>,
   pension: <><path d="M3 7v11M3 12h13a4 4 0 0 1 4 4v2"/><path d="M3 18h18"/><circle cx="7.5" cy="10" r="1.5"/></>,
   transport: <><rect x="3" y="5" width="18" height="12" rx="2"/><path d="M3 11h18M7 5v6"/><circle cx="7.5" cy="19" r="1.5"/><circle cx="16.5" cy="19" r="1.5"/></>,

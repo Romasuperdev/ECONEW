@@ -39,10 +39,14 @@ class Versement extends Model
     {
         $annee = AnneeContext::current();
         $societe = SocieteContext::current();
+        $etab = \App\Support\EtablissementContext::current();
         $cAnnee = static::col(['AnneeAcad', 'ANNEE', 'Annee', 'AnneeScolaire']);
         $cSoc = static::col(['CODESOCIETE', 'CodeSociete']);
+        $cEtab = static::col(['CODEETABLISSEMENT', 'CodeEtablissement']);
         return $q->when($annee && $cAnnee, fn ($x) => $x->where($cAnnee, $annee))
-                 ->when($societe && $cSoc, fn ($x) => $x->where($cSoc, $societe));
+                 ->when($societe && $cSoc, fn ($x) => $x->where($cSoc, $societe))
+                 // Isolation établissement tolérante (laisse passer les lignes non rattachées).
+                 ->when($etab && $cEtab, fn ($x) => $x->where(fn ($w) => $w->where($cEtab, $etab)->orWhereNull($cEtab)));
     }
 
     // Recupere la premiere colonne existante parmi une liste (tolerance aux noms legacy)

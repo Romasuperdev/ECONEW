@@ -12,12 +12,34 @@ class SocieteController extends Controller
     public function index(Request $request)
     {
         try {
+            $suspendues = Societe::suspendedCodes();
             return Societe::query()
                 ->when($request->search, fn ($q, $s) => $q->where('NOMSOCIETE', 'like', "%$s%")->orWhere('CODESOCIETE', 'like', "%$s%"))
-                ->orderBy('NOMSOCIETE')->get()->map->toNormalized();
+                ->orderBy('NOMSOCIETE')->get()->map(function ($s) use ($suspendues) {
+                    $n = $s->toNormalized();
+                    $n['suspendu'] = in_array((string) $n['code'], $suspendues, true);
+                    $n['statut'] = $n['suspendu'] ? 'suspendu' : 'actif';
+                    return $n;
+                })->values();
         } catch (\Throwable $e) {
             return response()->json([]);
         }
+    }
+
+    /** Suspend une société : ses utilisateurs seront bloqués à la connexion. */
+    public function suspendre(Societe $societe)
+    {
+        Societe::setSuspendue((string) $societe->CODESOCIETE, true);
+        AuditLogger::log('update', "Suspension société {$societe->NOMSOCIETE}");
+        return response()->json(['message' => 'Société suspendue.', 'statut' => 'suspendu']);
+    }
+
+    /** Réactive une société. */
+    public function activer(Societe $societe)
+    {
+        Societe::setSuspendue((string) $societe->CODESOCIETE, false);
+        AuditLogger::log('update', "Réactivation société {$societe->NOMSOCIETE}");
+        return response()->json(['message' => 'Société réactivée.', 'statut' => 'actif']);
     }
 
     public function store(Request $request)

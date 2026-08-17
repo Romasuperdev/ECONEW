@@ -20,6 +20,7 @@ export default function Schools() {
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(empty)
+  const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
   const [created, setCreated] = useState(null)
 
@@ -32,11 +33,32 @@ export default function Schools() {
   useEffect(() => { api.get('/super/plans').then(({ data }) => setPlans(data)) }, [])
   useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t) }, [search, status])
 
-  const openCreate = () => { setForm(empty); setError(''); setCreated(null); setModal(true) }
+  const openCreate = () => { setForm(empty); setEditing(null); setError(''); setCreated(null); setModal(true) }
+  const openEdit = (s) => {
+    setForm({
+      ...empty,
+      name: s.name || '', sigle: s.sigle || '', responsable_name: s.responsable_name || '',
+      address: s.address || '', city: s.city || '', country: s.country || '',
+      phone: s.phone || '', email: s.email || '', website: s.website || '',
+      timezone: s.timezone || 'Africa/Abidjan', rccm: s.rccm || '', tax_number: s.tax_number || '',
+      currency: s.currency || 'XOF', language: s.language || 'fr',
+    })
+    setEditing(s.id); setError(''); setCreated(null); setModal(true)
+  }
 
   const save = async (e) => {
     e.preventDefault(); setError('')
     try {
+      if (editing) {
+        await api.put(`/super/schools/${editing}`, {
+          name: form.name, sigle: form.sigle, responsable_name: form.responsable_name,
+          address: form.address, city: form.city, country: form.country,
+          language: form.language, phone: form.phone, email: form.email, website: form.website,
+          timezone: form.timezone, rccm: form.rccm, tax_number: form.tax_number, currency: form.currency,
+        })
+        setModal(false); load()
+        return
+      }
       const { data } = await api.post('/super/schools', {
         ...form,
         subscription_plan_id: form.subscription_plan_id || null,
@@ -92,6 +114,7 @@ export default function Schools() {
                     {s.status === 'active'
                       ? <button onClick={() => changeStatus(s, 'suspended')} className="text-amber-600 hover:underline">Suspendre</button>
                       : <button onClick={() => changeStatus(s, 'active')} className="text-turquoise-600 hover:underline">Activer</button>}
+                    <button onClick={() => openEdit(s)} className="hover:underline" style={{ color: 'var(--teal)' }}>Modifier</button>
                     <button onClick={() => remove(s)} className="text-red-600 hover:underline">Suppr.</button>
                   </td>
                 </tr>
@@ -101,7 +124,7 @@ export default function Schools() {
         )}
       </Card>
 
-      <Modal open={modal} onClose={() => setModal(false)} title="Nouvel établissement">
+      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Modifier l\'établissement' : 'Nouvel établissement'}>
         {created ? (
           <div className="space-y-3 text-sm">
             <div className="p-3 bg-turquoise-500/10 text-turquoise-600 rounded">
@@ -137,26 +160,30 @@ export default function Schools() {
               <Input label="N° fiscal" value={form.tax_number} onChange={(e) => setForm({ ...form, tax_number: e.target.value })} />
             </div>
 
-            <div className="text-xs font-semibold text-ink uppercase pt-2">Compte administrateur</div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Nom" value={form.admin_name} onChange={(e) => setForm({ ...form, admin_name: e.target.value })} required />
-              <Input label="Email" type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} required />
-            </div>
-            <Input label="Mot de passe" type="password" value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} required />
+            {!editing && (
+              <>
+                <div className="text-xs font-semibold text-ink uppercase pt-2">Compte administrateur</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Input label="Nom" value={form.admin_name} onChange={(e) => setForm({ ...form, admin_name: e.target.value })} required />
+                  <Input label="Email" type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} required />
+                </div>
+                <Input label="Mot de passe" type="password" value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} required />
 
-            <div className="text-xs font-semibold text-ink uppercase pt-2">Abonnement initial</div>
-            <div className="grid grid-cols-2 gap-3">
-              <Select label="Formule" value={form.subscription_plan_id} onChange={(e) => setForm({ ...form, subscription_plan_id: e.target.value })}>
-                <option value="">— Aucune —</option>
-                {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </Select>
-              <Input label="Durée (jours)" type="number" value={form.trial_days} onChange={(e) => setForm({ ...form, trial_days: e.target.value })} />
-            </div>
+                <div className="text-xs font-semibold text-ink uppercase pt-2">Abonnement initial</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <Select label="Formule" value={form.subscription_plan_id} onChange={(e) => setForm({ ...form, subscription_plan_id: e.target.value })}>
+                    <option value="">— Aucune —</option>
+                    {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </Select>
+                  <Input label="Durée (jours)" type="number" value={form.trial_days} onChange={(e) => setForm({ ...form, trial_days: e.target.value })} />
+                </div>
+              </>
+            )}
 
             {error && <div className="text-sm text-red-600">{error}</div>}
             <div className="flex justify-end gap-2">
               <Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button>
-              <Button type="submit">Créer l'établissement</Button>
+              <Button type="submit">{editing ? 'Enregistrer' : 'Créer l\'établissement'}</Button>
             </div>
           </form>
         )}

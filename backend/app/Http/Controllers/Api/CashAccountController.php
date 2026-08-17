@@ -21,6 +21,7 @@ use App\Support\UidRegistry;
 class CashAccountController extends Controller
 {
     private const META = 'ECO_CAISSE_PRINCIPALE';
+    private const META2 = 'ECO_CAISSE_META';   // description / statut / date de création
 
     public function index()
     {
@@ -31,13 +32,18 @@ class CashAccountController extends Controller
         }
 
         $principal = $this->principalCode();
+        $metaMap = $this->metaMap();
         // Les soldes ne sont calculés que si demandés (ex. la page Caisses n'affiche pas le solde).
         $skipBalances = request()->query('balances') === '0';
         $balMap = $skipBalances ? [] : $this->balancesMap();
 
-        return response()->json($caisses->map(function (Caisse $c) use ($principal, $balMap, $skipBalances) {
+        return response()->json($caisses->map(function (Caisse $c) use ($principal, $balMap, $skipBalances, $metaMap) {
             $data = $c->toNormalized();
             $data['is_principal'] = $principal !== null && (string) $data['code'] === (string) $principal;
+            $meta = $metaMap[(string) $data['code']] ?? null;
+            $data['description'] = $meta->DESCRIPTION ?? null;
+            $data['statut'] = $meta->STATUT ?? 'actif';
+            $data['created_at'] = isset($meta->CREATED_AT) ? (string) $meta->CREATED_AT : null;
             if (! $skipBalances && $data['balance'] === null && $data['code'] !== null) {
                 $data['balance'] = number_format($balMap[(string) $data['code']] ?? 0, 2, '.', '');
             }
@@ -77,6 +83,8 @@ class CashAccountController extends Controller
             'name' => ['required', 'string', 'max:100'],
             'code' => ['nullable', 'string', 'max:50'],
             'is_principal' => ['nullable', 'boolean'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'statut' => ['nullable', 'string', 'max:20'],
         ]);
 
         $codeCol = Caisse::col(['CODECAISSE', 'CodeCaisse']) ?? 'CODECAISSE';
@@ -107,11 +115,18 @@ class CashAccountController extends Controller
         if (! empty($data['is_principal'])) {
             $this->setPrincipal($code);
         }
+        $this->writeMeta($code, [
+            'DESCRIPTION' => $data['description'] ?? null,
+            'STATUT' => $data['statut'] ?? 'actif',
+        ], true);
         AuditLogger::log('create', "Création caisse {$data['name']} ({$code})");
         UidRegistry::assign('CAISSE', $code);
 
         $out = $c->toNormalized();
         $out['is_principal'] = $this->principalCode() === (string) $code;
+        $meta = $this->metaMap()[(string) $code] ?? null;
+        $out['description'] = $meta->DESCRIPTION ?? ($data['description'] ?? null);
+        $out['statut'] = $meta->STATUT ?? 'actif';
 
         return response()->json($out, 201);
     }
@@ -121,6 +136,8 @@ class CashAccountController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:100'],
             'is_principal' => ['nullable', 'boolean'],
+            'description' => ['nullable', 'string', 'max:255'],
+            'statut' => ['nullable', 'string', 'max:20'],
         ]);
         $c = $this->findByCode($cashAccount);
         if (! $c) {
@@ -139,8 +156,16 @@ class CashAccountController extends Controller
             }
         }
 
+        $metaUpd = [];
+        if ($request->has('description')) { $metaUpd['DESCRIPTION'] = $data['description'] ?? null; }
+        if ($request->has('statut')) { $metaUpd['STATUT'] = $data['statut'] ?: 'actif'; }
+        if (! empty($metaUpd)) { $this->writeMeta($cashAccount, $metaUpd, false); }
+
         $out = $c->toNormalized();
         $out['is_principal'] = $this->principalCode() === (string) $cashAccount;
+        $meta = $this->metaMap()[(string) $cashAccount] ?? null;
+        $out['description'] = $meta->DESCRIPTION ?? null;
+        $out['statut'] = $meta->STATUT ?? 'actif';
 
         return response()->json($out);
     }
@@ -304,6 +329,75 @@ class CashAccountController extends Controller
         }
         try {
             DB::connection('economat')->table(self::META)->where('CODECAISSE', $code)->delete();
+        } catch (\Throwable $e) {
+        }
+    }
+
+    /* ----------------- Métadonnées caisse (description / statut / date) ----------------- */
+
+    private function ensureMeta2(): bool
+    {
+        try {
+            if (! Schema::connection('economat')->hasTable(self::META2)) {
+                Schema::connection('economat')->create(self::META2, function ($t) {
+                    $t->increments('id');
+                    $t->string('CODECAISSE', 50);
+                    $t->string('DESCRIPTION', 255)->nullable();
+                    $t->string('STATUT', 20)->default('actif');
+                    $t->string('CODESOCIETE', 50)->nullable();
+                    $t->string('CODEETABLISSEMENT', 50)->nullable();
+                    $t->dateTime('CREATED_AT')->nullable();
+                });
+            }
+            return true;
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
+    private function metaMap(): array
+    {
+        if (! $this->ensureMeta2()) {
+            return [];
+        }
+        try {
+            $soc = SocieteContext::current();
+            $etab = EtablissementContext::current();
+            return DB::connection('economat')->table(self::META2)
+                ->when($soc, fn ($q) => $q->where('CODESOCIETE', $soc))
+                ->when($etab, fn ($q) => $q->where('CODEETABLISSEMENT', $etab))
+                ->get()->keyBy(fn ($r) => (string) $r->CODECAISSE)->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    private function writeMeta(string $code, array $fields, bool $creating): void
+    {
+        if (! $this->ensureMeta2()) {
+            return;
+        }
+        try {
+            $soc = SocieteContext::current();
+            $etab = EtablissementContext::current();
+            $exists = DB::connection('economat')->table(self::META2)->where('CODECAISSE', $code)
+                ->when($soc, fn ($q) => $q->where('CODESOCIETE', $soc))
+                ->when($etab, fn ($q) => $q->where('CODEETABLISSEMENT', $etab))
+                ->exists();
+            if ($exists) {
+                DB::connection('economat')->table(self::META2)->where('CODECAISSE', $code)
+                    ->when($soc, fn ($q) => $q->where('CODESOCIETE', $soc))
+                    ->when($etab, fn ($q) => $q->where('CODEETABLISSEMENT', $etab))
+                    ->update($fields);
+            } else {
+                DB::connection('economat')->table(self::META2)->insert(array_merge([
+                    'CODECAISSE' => $code,
+                    'CODESOCIETE' => $soc,
+                    'CODEETABLISSEMENT' => $etab,
+                    'STATUT' => 'actif',
+                    'CREATED_AT' => now(),
+                ], $fields));
+            }
         } catch (\Throwable $e) {
         }
     }

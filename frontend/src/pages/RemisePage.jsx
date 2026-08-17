@@ -22,7 +22,17 @@ export default function RemisePage() {
   const [form, setForm] = useState(empty)
   const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
+  const [elig, setElig] = useState({})   // { rubrique: { remise_existe, a_paye } }
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  // Une rubrique est verrouillée si une remise existe déjà OU si l'élève a payé.
+  const lockInfo = (type) => {
+    const e = elig?.[type]
+    if (!e) return null
+    if (e.a_paye) return 'déjà payé'
+    if (e.remise_existe) return 'déjà remisé'
+    return null
+  }
   const annee = localStorage.getItem('annee') || '—'
 
   const load = () => { setLoadError(''); return Promise.all([
@@ -54,6 +64,8 @@ export default function RemisePage() {
     const s = studByMat[String(mat)]
     const niveau = s?.code_niveau || ''
     setForm((f) => ({ ...f, matricule: mat, nom: s?.last_name || '', prenom: s?.first_name || '', niveau, montant: f.type ? String(baseFor(f.type, niveau) || '') : f.montant }))
+    setElig({})
+    if (mat) api.get('/remises/eligibilite', { params: { matricule: mat } }).then(({ data }) => setElig(data || {})).catch(() => setElig({}))
   }
   const pickType = (type) => setForm((f) => ({ ...f, type, montant: String(baseFor(type, f.niveau) || '') }))
 
@@ -64,8 +76,15 @@ export default function RemisePage() {
   const openEdit = (r) => { setForm({ matricule: r.matricule || '', nom: r.nom || '', prenom: r.prenom || '', niveau: r.niveau || '', type: r.type || '', montant: r.montant ?? '', taux: r.taux ?? '' }); setEditing(r.id); setError(''); setModal(true) }
   const save = async (e) => {
     e.preventDefault(); setError('')
+    const taux = Number(form.taux || 0)
+    if (taux < 0 || taux > 100) { setError('Le taux doit être compris entre 0 et 100 %.'); return }
+    if (!Number(form.montant)) { setError('Aucun montant de base : vérifiez la grille pour cette rubrique / ce niveau.'); return }
+    if (!editing) {
+      const lock = lockInfo(form.type)
+      if (lock) { setError(`Remise impossible sur « ${form.type} » : ${lock}.`); return }
+    }
     try {
-      const payload = { ...form, montant: Number(form.montant || 0), taux: Number(form.taux || 0) }
+      const payload = { ...form, montant: Number(form.montant || 0), taux }
       if (editing) await api.put(`/remises/${editing}`, payload); else await api.post('/remises', payload)
       setModal(false); load()
     } catch (err) { setError(err.response?.data?.message || 'Erreur.') }
@@ -120,15 +139,36 @@ export default function RemisePage() {
           </div>
           <Select label="Type de remise (rubrique)" value={form.type} onChange={(e) => pickType(e.target.value)} required>
             <option value="">— Choisir —</option>
-            {TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            {TYPES.map((t) => {
+              const lock = !editing && lockInfo(t)
+              return <option key={t} value={t} disabled={!!lock}>{t}{lock ? ` — ${lock}` : ''}</option>
+            })}
           </Select>
+          {!editing && lockInfo(form.type) && (
+            <div className="text-xs" style={{ color: '#b23b28' }}>Remise impossible sur « {form.type} » : {lockInfo(form.type)}.</div>
+          )}
           <div className="grid grid-cols-2 gap-3">
-            <Input label="Montant (depuis la grille)" type="number" value={form.montant} onChange={(e) => set('montant', e.target.value)} required />
-            <Input label="Taux de remise (%)" type="number" value={form.taux} onChange={(e) => set('taux', e.target.value)} />
+            <div>
+              <Input label="Montant de base (grille)" value={formatMoney(form.montant)} readOnly className="bg-gray-50 font-semibold" />
+              {form.type && !Number(form.montant) && <div className="text-xs text-red-600 mt-1">Aucun montant de grille pour « {form.type} » sur ce niveau.</div>}
+            </div>
+            <Input label="Taux de remise (%)" type="number" min="0" max="100" value={form.taux} onChange={(e) => set('taux', e.target.value)} placeholder="ex : 25" required />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Montant remise (auto)" value={formatMoney(montantRemise)} readOnly className="bg-gray-50" />
-            <Input label="Montant avec remise (auto)" value={formatMoney(montantAvec)} readOnly className="font-semibold bg-gray-50" />
+
+          {/* Récapitulatif : la remise se voit par le taux */}
+          <div className="rounded-xl p-4" style={{ background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-ink">Montant de base</span>
+              <span className="font-semibold">{formatMoney(form.montant)}</span>
+            </div>
+            <div className="flex items-center justify-between text-sm mt-1">
+              <span className="text-ink">Remise ({Number(form.taux || 0)}%)</span>
+              <span className="font-semibold" style={{ color: '#b23b28' }}>− {formatMoney(montantRemise)}</span>
+            </div>
+            <div className="flex items-center justify-between mt-2 pt-2" style={{ borderTop: '2px solid var(--border)' }}>
+              <span className="font-bold text-heading">Net à payer</span>
+              <span className="text-lg font-extrabold" style={{ color: 'var(--teal)' }}>{formatMoney(montantAvec)}</span>
+            </div>
           </div>
           {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button><Button type="submit">Enregistrer</Button></div>

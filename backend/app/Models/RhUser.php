@@ -155,18 +155,37 @@ class RhUser extends Authenticatable
         return trim(($this->Prenom ?? '').' '.($this->Nom ?? '')) ?: ($this->Login ?? 'Utilisateur');
     }
 
+    /** Clés des modules console accordés (rôle admin_etablissement). */
+    public function modulesAutorises(): array
+    {
+        try {
+            return \App\Models\ModuleConsole::accordesPour($this->Id);
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** L'utilisateur a-t-il accès au module console donné ? */
+    public function hasModuleAccess(string $cle): bool
+    {
+        return in_array($cle, $this->modulesAutorises(), true);
+    }
+
     public function toAuthPayload(): array
     {
+        $role = $this->effectiveRole();
         return [
             'id' => $this->Id,
             'name' => $this->name,
             'login' => $this->Login,
             'email' => $this->Email,
-            'role' => $this->effectiveRole(),
+            'role' => $role,
             'real_role' => $this->role,
             'is_super' => (bool) $this->SuperAdmin,
             'abilities' => $this->abilities(),
             'assignable_roles' => (bool) $this->SuperAdmin ? (array) config('permissions.assignable', []) : [],
+            // Modules console accordés (utilisé par la sidebar de l'admin d'établissement).
+            'modules_autorises' => $role === 'admin_etablissement' ? $this->modulesAutorises() : [],
             'school_id' => null,
             'school' => null,
         ];

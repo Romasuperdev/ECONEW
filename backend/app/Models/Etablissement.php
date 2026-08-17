@@ -44,6 +44,19 @@ class Etablissement extends Model
         return static::col(['CODE', 'Code', 'CODEETABLISSEMENT', 'CodeEtablissement', 'CODEETAB', 'CodeEtab']);
     }
 
+    /** Nom lisible de l'etablissement courant (en-tete des documents). */
+    public static function currentName(): ?string
+    {
+        $code = \App\Support\EtablissementContext::current();
+        $col = static::codeColumn();
+        try {
+            $row = static::query()->when($code && $col, fn ($q) => $q->where($col, $code))->first();
+            return $row ? ($row->toNormalized()['name'] ?? $code) : $code;
+        } catch (\Throwable $e) {
+            return $code;
+        }
+    }
+
     /** Etablissements de la societe courante, avec repli sur tous si le filtre ne donne rien. */
     public static function available()
     {

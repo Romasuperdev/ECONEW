@@ -30,6 +30,12 @@ export default function Societes() {
     } catch (err) { setError(err.response?.data?.message || 'Erreur.') }
   }
   const remove = async (s) => { if (!confirm(`Supprimer ${s.name} ?`)) return; await api.delete(`/super/societes/${s.id}`); load() }
+  const toggleSusp = async (s) => {
+    const action = s.suspendu ? 'activer' : 'suspendre'
+    if (!confirm(s.suspendu ? `Réactiver ${s.name} ?` : `Suspendre ${s.name} ? Ses utilisateurs ne pourront plus se connecter.`)) return
+    try { await api.patch(`/super/societes/${s.id}/${action}`); load() }
+    catch (err) { alert(err.response?.data?.message || 'Erreur.') }
+  }
 
   return (
     <>
@@ -41,15 +47,20 @@ export default function Societes() {
       <Card className="overflow-hidden">
         {loading ? <EmptyState message="Chargement…" /> : items.length === 0 ? <EmptyState /> : (
           <table className="w-full text-sm">
-            <thead className="text-left"><tr><th className="px-4 py-3">Société</th><th>Code</th><th>Ville</th><th>Base</th><th></th></tr></thead>
+            <thead className="text-left"><tr><th className="px-4 py-3">Société</th><th>Code</th><th>Ville</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               {items.map((s) => (
                 <tr key={s.id} className="border-t">
                   <td className="px-4 py-2 font-medium">{s.name}</td>
                   <td className="font-mono text-xs">{s.code}</td>
                   <td>{s.ville || '—'}</td>
-                  <td className="text-muted">{s.base || '—'}</td>
+                  <td>
+                    {s.suspendu
+                      ? <span style={{ background: '#fdecec', color: '#b23b28', borderRadius: 999, padding: '3px 10px', fontSize: 11.5, fontWeight: 700 }}>Suspendu</span>
+                      : <span style={{ background: '#e6f6ec', color: '#1b7a37', borderRadius: 999, padding: '3px 10px', fontSize: 11.5, fontWeight: 700 }}>Actif</span>}
+                  </td>
                   <td className="text-right px-4 space-x-3 whitespace-nowrap">
+                    <button onClick={() => toggleSusp(s)} className="hover:underline" style={{ color: s.suspendu ? '#1b7a37' : '#a9761a' }}>{s.suspendu ? 'Activer' : 'Suspendre'}</button>
                     <button onClick={() => openEdit(s)} className="text-brand-600 hover:underline" style={{ color: 'var(--teal)' }}>Modifier</button>
                     <button onClick={() => remove(s)} className="text-red-600 hover:underline">Suppr.</button>
                   </td>

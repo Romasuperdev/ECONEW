@@ -5,6 +5,7 @@ import { Card, Button, Input, Select, EmptyState } from '../components/ui'
 import PageHeader from '../components/PageHeader'
 import Icon from '../components/Icon'
 import { formatMoney } from '../utils/format'
+import { useAuth } from '../context/AuthContext'
 
 const empty = {
   date_inscription: new Date().toISOString().slice(0, 10),
@@ -37,6 +38,17 @@ export default function StudentForm() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+  const { user } = useAuth()
+  const societeName = user?.societes?.[0]?.name || 'AURIAK TECHNOLOGY'
+  const [etabName, setEtabName] = useState('')
+  useEffect(() => {
+    api.get('/etablissements').then(({ data }) => {
+      const list = data.data || data
+      const cur = localStorage.getItem('etablissement')
+      const e = list.find((x) => String(x.code) === String(cur)) || list[0]
+      setEtabName(e?.name || '')
+    }).catch(() => {})
+  }, [])
 
   useEffect(() => {
     api.get('/levels').then(({ data }) => setLevels(data.data || data)).catch(() => setLevels([]))
@@ -320,8 +332,14 @@ export default function StudentForm() {
 
       {/* Fiche imprimable (visible uniquement à l'impression) */}
       <div className="print-fiche">
-        <div style={{ border: '6px double #1f3a63', color: '#1f3a63', fontFamily: 'Georgia, serif', padding: '24px' }}>
-          <h1 style={{ textAlign: 'center', fontSize: '28px', fontWeight: 800, letterSpacing: '.5px', marginBottom: '18px' }}>Fiche d'inscription</h1>
+        <div style={{ border: '2px solid #00A876', color: '#173a24', fontFamily: 'Georgia, serif', padding: '24px' }}>
+          <div style={{ textAlign: 'center', borderBottom: '2px solid #00A876', paddingBottom: '8px', marginBottom: '14px' }}>
+            <div style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '.5px' }}>{societeName}</div>
+            <div style={{ fontSize: '11px', color: '#5A6B7B' }}>Solutions de gestion scolaire — BACOU ECONOMAT</div>
+            {etabName && <div style={{ fontSize: '13px', fontWeight: 700, color: '#00A876', marginTop: '2px' }}>{etabName}</div>}
+          </div>
+          <h1 style={{ textAlign: 'center', fontSize: '22px', fontWeight: 800, letterSpacing: '1px', margin: '4px 0 6px' }}>FICHE D'INSCRIPTION</h1>
+          <div style={{ textAlign: 'center', fontSize: '12px', marginBottom: '16px' }}>Année scolaire : <strong>{form.date_inscription ? new Date(form.date_inscription).getFullYear() : ''}</strong></div>
           <div style={{ display: 'flex', gap: '24px' }}>
             <div style={{ width: '150px', textAlign: 'center' }}>
               <div style={{ width: '150px', height: '185px', border: '2px solid #1f3a63', borderRadius: '14px', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -356,10 +374,11 @@ export default function StudentForm() {
             <div key={p.rubrique} className="pf-line"><strong>{p.rubrique.toUpperCase()} :</strong> <span className="pf-val">{formatMoney(p.total)}</span></div>
           ))}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '40px', fontSize: '13px' }}>
-            <div>Fait le {new Date(form.date_inscription || Date.now()).toLocaleDateString('fr-FR')}</div>
-            <div>Signature : ______________________</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '48px', fontSize: '12px', textAlign: 'center' }}>
+            <div style={{ width: '45%', borderTop: '1px solid #333', paddingTop: '4px' }}>Signature du parent / tuteur</div>
+            <div style={{ width: '45%', borderTop: '1px solid #333', paddingTop: '4px' }}>Cachet et signature de l'établissement</div>
           </div>
+          <div style={{ marginTop: '18px', fontSize: '12px' }}>Fait à ____________________, le {new Date(form.date_inscription || Date.now()).toLocaleDateString('fr-FR')}</div>
         </div>
       </div>
     </>

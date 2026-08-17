@@ -4,58 +4,58 @@
 
 /* ===================== THÈMES ===================== */
 :root, [data-theme="light"] {
-  --bg: #eef2f7;
-  --bg-grad-1: rgba(46,156,156,0.06);
-  --bg-grad-2: rgba(217,164,65,0.07);
+  --bg: #E5FFF7;               /* vert pâle (fond) */
+  --bg-grad-1: rgba(0,204,142,0.09);
+  --bg-grad-2: rgba(0,204,142,0.05);
   --surface: #ffffff;
-  --surface-2: #f4f7fb;
-  --text: #1f2a3a;
-  --heading: #17233a;
-  --muted: #63748c;
-  --border: #e4eaf2;
-  --sidebar: #14223f;
-  --sidebar-2: #0e1a30;
-  --sidebar-text: #cdd9ee;
-  --accent: #d9a441;      /* or */
-  --accent-ink: #2a1e05;
-  --teal: #2e9c9c;
-  --shadow: 0 1px 3px rgba(16,24,40,.06), 0 1px 2px rgba(16,24,40,.04);
+  --surface-2: #f0fff9;
+  --text: #123a2c;
+  --heading: #0c2c21;
+  --muted: #5b7a6d;
+  --border: #cdeede;
+  --sidebar: #063d2b;         /* vert profond */
+  --sidebar-2: #04301f;
+  --sidebar-text: #cbeede;
+  --accent: #00CC8E;          /* vert menthe (principal) */
+  --accent-ink: #06301f;
+  --teal: #009A6B;
+  --shadow: 0 1px 3px rgba(6,61,43,.08), 0 1px 2px rgba(6,61,43,.05);
 }
 [data-theme="dark"] {
-  --bg: #0e1626;
-  --bg-grad-1: rgba(46,156,156,0.10);
-  --bg-grad-2: rgba(217,164,65,0.08);
-  --surface: #17223a;
-  --surface-2: #1e2b47;
-  --text: #e7eefb;
-  --heading: #f3f7ff;
-  --muted: #9fb2ce;
-  --border: #283654;
-  --sidebar: #0a1120;
-  --sidebar-2: #070c18;
-  --sidebar-text: #c3d2ec;
-  --accent: #e0ad4b;
-  --accent-ink: #2a1e05;
-  --teal: #38b6b6;
+  --bg: #08201a;
+  --bg-grad-1: rgba(0,204,142,0.12);
+  --bg-grad-2: rgba(0,204,142,0.06);
+  --surface: #10271f;
+  --surface-2: #163326;
+  --text: #e6fff5;
+  --heading: #f2fffb;
+  --muted: #9ec9b9;
+  --border: #244a3a;
+  --sidebar: #041f16;
+  --sidebar-2: #02160f;
+  --sidebar-text: #c3e9d9;
+  --accent: #00CC8E;
+  --accent-ink: #052018;
+  --teal: #33D3A2;
   --shadow: 0 1px 3px rgba(0,0,0,.45), 0 1px 2px rgba(0,0,0,.35);
 }
 [data-theme="sunny"] {
-  --bg: #fff6e6;
-  --bg-grad-1: rgba(46,156,156,0.10);
-  --bg-grad-2: rgba(224,138,30,0.14);
-  --surface: #fffdf7;
-  --surface-2: #fdefd4;
-  --text: #40331c;
-  --heading: #5a3d12;
-  --muted: #93805a;
-  --border: #f1e2bf;
-  --sidebar: #123a63;
-  --sidebar-2: #0d2c4c;
-  --sidebar-text: #e8f0fb;
-  --accent: #e2841a;      /* orange soleil */
-  --accent-ink: #fff;
-  --teal: #128a8a;
-  --shadow: 0 2px 6px rgba(180,120,30,.12);
+  --bg: #E5FFF7;
+  --bg-grad-1: rgba(0,204,142,0.14);
+  --bg-grad-2: rgba(51,211,162,0.12);
+  --surface: #ffffff;
+  --surface-2: #eafff8;
+  --text: #123a2c;
+  --heading: #0c2c21;
+  --muted: #5b7a6d;
+  --border: #bfeede;
+  --sidebar: #00CC8E;         /* menthe vive */
+  --sidebar-2: #00B37D;
+  --sidebar-text: #eafff7;
+  --accent: #007E58;          /* vert foncé en accent pour contraster */
+  --accent-ink: #ffffff;
+  --teal: #009A6B;
+  --shadow: 0 2px 6px rgba(0,204,142,.14);
 }
 
 * { border-color: var(--border); }
@@ -81,6 +81,17 @@ body {
   width: 100%; padding: .7rem .9rem; border-radius: .75rem; font-size: .95rem; font-weight: 500;
   background: color-mix(in srgb, var(--surface-2) 60%, var(--surface));
   color: var(--text); border: 1.5px solid var(--border); outline: none;
+}
+
+/* Année scolaire clôturée : les saisies sont désactivées (grisées).
+   Les champs de recherche/lecture peuvent être exemptés via data-lock-ok. */
+.year-locked input:not([data-lock-ok]),
+.year-locked select:not([data-lock-ok]),
+.year-locked textarea:not([data-lock-ok]),
+.year-locked button[type="submit"]:not([data-lock-ok]) {
+  pointer-events: none !important;
+  opacity: .5 !important;
+  cursor: not-allowed !important;
 }
 .field::placeholder { color: var(--muted); font-weight: 400; }
 .field:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Support\AnneeContext;
 use App\Support\EtablissementContext;
 use App\Support\SocieteContext;
+use App\Models\GrilleScolarite;
 use App\Models\SchoolClass;
 use App\Models\Student;
 use Illuminate\Http\Request;
@@ -26,9 +27,40 @@ class StudentController extends Controller
 
         $perPage = (int) ($request->per_page ?? 30);
         $page = $q->paginate($perPage);
-        $page->getCollection()->transform(fn ($s) => $s->toNormalized());
+
+        // Barème de scolarité par niveau (grille tarifaire) : repli auto quand
+        // la scolarité stockée sur l'élève est vide/0.
+        $grilleByNiveau = $this->grilleScolariteByNiveau();
+
+        $page->getCollection()->transform(function ($s) use ($grilleByNiveau) {
+            $n = $s->toNormalized();
+            if (! (float) ($n['scolarite'] ?? 0)) {
+                $code = (string) ($n['code_niveau'] ?? '');
+                if ($code !== '' && isset($grilleByNiveau[$code])) {
+                    $n['scolarite'] = $grilleByNiveau[$code];
+                }
+            }
+            return $n;
+        });
 
         return $page;
+    }
+
+    /** Map [code_niveau => montant scolarité] à partir de la grille tarifaire. */
+    private function grilleScolariteByNiveau(): array
+    {
+        $map = [];
+        try {
+            foreach (GrilleScolarite::available() as $g) {
+                $row = $g->toNormalized();
+                $code = (string) ($row['code_grille'] ?? '');
+                $sco = (float) ($row['scolarite'] ?? 0);
+                if ($code !== '' && $sco > 0) {
+                    $map[$code] = $sco;
+                }
+            }
+        } catch (\Throwable $e) {}
+        return $map;
     }
 
     public function store(Request $request)
@@ -91,9 +123,49 @@ class StudentController extends Controller
 
     public function destroy(Student $student)
     {
+        // Règle métier : un élève ayant effectué au moins un paiement ne peut pas
+        // être supprimé (intégrité comptable). Seul un élève inscrit sans aucun
+        // versement peut être supprimé.
+        if ($this->hasPayments($student)) {
+            return response()->json([
+                'message' => "Suppression impossible : cet élève a déjà effectué des paiements. Un élève avec des versements ne peut pas être supprimé.",
+            ], 422);
+        }
+
         $student->delete();
 
         return response()->json(['message' => 'Élève supprimé.']);
+    }
+
+    /** L'élève a-t-il un paiement (solde payé, versement, ou paiement de dossier) ? */
+    private function hasPayments(Student $student): bool
+    {
+        // 1) Solde payé sur la fiche
+        if ((float) ($student->TotalPaye ?? 0) > 0) {
+            return true;
+        }
+        $mat = (string) $student->Matricule;
+
+        // 2) Un versement enregistré (T_VERSEMENT), détection tolérante de la colonne matricule
+        try {
+            $col = \App\Models\Versement::col(['Matricule', 'MATRICULE', 'CodeEleve', 'CODEELEVE']);
+            if ($col && \App\Models\Versement::query()->where($col, $mat)->exists()) {
+                return true;
+            }
+        } catch (\Throwable $e) {}
+
+        // 3) Un paiement de dossier / frais annexes réellement encaissé
+        try {
+            if (Schema::connection('economat')->hasTable('paiements_dossiers')) {
+                $paye = DB::connection('economat')->table('paiements_dossiers')
+                    ->where('matricule_eleve', $mat)->sum('montant_paye');
+                if ((float) $paye > 0) {
+                    return true;
+                }
+            }
+        } catch (\Throwable $e) {}
+
+        return false;
     }
 
     /** Construit le payload des colonnes T_ETUDIANT a partir des donnees validees. */

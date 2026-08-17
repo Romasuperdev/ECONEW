@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { Button, Input } from '../components/ui'
-import { LogoMark } from '../components/Logo'
+import { LogoMark, LogoFull } from '../components/Logo'
 import ThemeSwitcher from '../components/ThemeSwitcher'
 import Icon from '../components/Icon'
+import { apiError } from '../utils/apiError'
 import LoginBackground from '../components/LoginBackground'
 
 export default function Login() {
@@ -24,7 +25,9 @@ export default function Login() {
   const routeAfterLogin = async (user) => {
     const isSuper = user?.is_super || user?.role === 'super_admin'
     if (active === 'console' && !isSuper) { await logout(); setError("Ce compte n'a pas accès à la console plateforme."); return }
-    navigate(active === 'console' ? '/super' : '/')
+    if (active === 'console') { navigate('/super'); return }
+    if (user?.role === 'admin_etablissement') { navigate('/admin-etablissement'); return }
+    navigate('/')
   }
 
   const submit = async (e) => {
@@ -34,14 +37,14 @@ export default function Login() {
       if (res?.twoFactor) { setOtpStep(true); setOtpInfo(res.message || 'Un code vous a été envoyé par email.'); return }
       await routeAfterLogin(res)
     } catch (err) {
-      setError(err.response?.data?.message || err.response?.data?.errors?.email?.[0] || 'Connexion impossible.')
+      setError(err.response?.data?.errors?.email?.[0] || err.response?.data?.message || apiError(err))
     } finally { setLoading(false) }
   }
 
   const submitOtp = async (e) => {
     e.preventDefault(); setError(''); setLoading(true)
     try { await routeAfterLogin(await verifyOtp(email, otp.trim())) }
-    catch (err) { setError(err.response?.data?.errors?.code?.[0] || err.response?.data?.message || 'Code incorrect.') }
+    catch (err) { setError(err.response?.data?.errors?.code?.[0] || err.response?.data?.message || apiError(err)) }
     finally { setLoading(false) }
   }
 
@@ -49,16 +52,16 @@ export default function Login() {
   const renderForm = (kind) => {
     const isConsole = kind === 'console'
     return (
-      <form onSubmit={submit} className="w-full max-w-[320px] mx-auto flex flex-col items-center text-center gap-3">
+      <form onSubmit={submit} className="w-full max-w-[340px] mx-auto flex flex-col items-center text-center gap-3 text-[15px]">
         <div className="flex items-center gap-2 mb-1" style={{ color: isConsole ? 'var(--sidebar)' : 'var(--accent)' }}>
-          <Icon name={isConsole ? 'globe' : 'building'} size={22} />
-          <h2 className="text-xl font-extrabold text-heading">{isConsole ? 'Console plateforme' : 'Application école'}</h2>
+          <Icon name={isConsole ? 'globe' : 'building'} size={26} />
+          <h2 className="text-2xl font-extrabold text-heading">{isConsole ? 'Console plateforme' : 'Application école'}</h2>
         </div>
-        <p className="text-muted text-sm mb-2">{isConsole ? 'Espace Super Administrateur.' : 'Accédez à votre établissement.'}</p>
+        <p className="text-muted text-base mb-2">{isConsole ? 'Espace Super Administrateur.' : 'Accédez à votre établissement.'}</p>
         <div className="w-full text-left"><Input label="Identifiant (login ou e-mail)" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
         <div className="w-full text-left"><Input label="Mot de passe" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
         {error && <div className="w-full text-sm text-red-600 rounded-lg p-2" style={{ background: 'rgba(220,38,38,.1)' }}>{error}</div>}
-        <Button type="submit" variant={isConsole ? 'primary' : 'gold'} disabled={loading} className="w-full justify-center mt-1">
+        <Button type="submit" variant={isConsole ? 'primary' : 'gold'} disabled={loading} className="w-full justify-center mt-1 text-base py-3">
           {loading ? 'Connexion…' : (isConsole ? 'Accéder à la console' : "Accéder à l'application")}
         </Button>
       </form>
@@ -74,7 +77,7 @@ export default function Login() {
 
       {otpStep ? (
         <div className="relative z-10 card rounded-2xl p-8 w-full max-w-md">
-          <div className="flex flex-col items-center mb-4"><LogoMark size={52} /><h1 className="text-xl font-bold text-heading mt-2">Vérification en deux étapes</h1></div>
+          <div className="flex flex-col items-center mb-4"><LogoFull variant="color" height={80} /><h1 className="text-xl font-bold text-heading mt-3">Vérification en deux étapes</h1></div>
           <p className="text-muted text-sm mb-5 text-center">{otpInfo}</p>
           <form onSubmit={submitOtp} className="space-y-4">
             <Input label="Code à 6 chiffres" value={otp} inputMode="numeric" maxLength={6}
@@ -103,21 +106,21 @@ export default function Login() {
                 transform: consoleActive ? 'translateX(-100%)' : 'translateX(0)',
                 transition: 'transform .6s cubic-bezier(.6,.05,.2,1)',
                 background: consoleActive
-                  ? 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #b8860b))'
+                  ? 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, #009A6B))'
                   : 'linear-gradient(135deg, var(--sidebar), var(--sidebar-2, #12305e))',
               }}>
-              <div className="text-center max-w-[300px]">
-                <LogoMark size={48} />
-                <h2 className="text-2xl font-extrabold mt-3">{consoleActive ? 'Bienvenue' : 'Economat'}</h2>
+              <div className="text-center max-w-[300px] flex flex-col items-center">
+                <LogoFull variant="white" height={120} />
+                <h2 className="text-3xl font-extrabold mt-4">Bienvenue</h2>
                 {consoleActive ? (
                   <>
-                    <p className="text-white/80 text-sm mt-2">Vous gérez un établissement ? Connectez-vous à l'application.</p>
-                    <button onClick={() => switchTo('app')} className="mt-5 px-6 py-2 rounded-xl font-semibold text-sm border-2 border-white/80 hover:bg-white/10 transition">Application école</button>
+                    <p className="text-white/80 text-base mt-3">Vous gérez un établissement ? Connectez-vous à l'application.</p>
+                    <button onClick={() => switchTo('app')} className="mt-5 px-6 py-2.5 rounded-xl font-semibold text-base border-2 border-white/80 hover:bg-white/10 transition">Application école</button>
                   </>
                 ) : (
                   <>
-                    <p className="text-white/80 text-sm mt-2">Vous êtes administrateur plateforme ? Accédez à la console.</p>
-                    <button onClick={() => switchTo('console')} className="mt-5 px-6 py-2 rounded-xl font-semibold text-sm border-2 border-white/80 hover:bg-white/10 transition">Console plateforme</button>
+                    <p className="text-white/80 text-base mt-3">Vous êtes administrateur plateforme ? Accédez à la console.</p>
+                    <button onClick={() => switchTo('console')} className="mt-5 px-6 py-2.5 rounded-xl font-semibold text-base border-2 border-white/80 hover:bg-white/10 transition">Console plateforme</button>
                   </>
                 )}
               </div>
@@ -126,7 +129,7 @@ export default function Login() {
 
           {/* ---------- Mobile : onglets + formulaire ---------- */}
           <div className="relative z-10 md:hidden w-full max-w-md">
-            <div className="flex flex-col items-center mb-5"><LogoMark size={56} /><h1 className="text-2xl font-extrabold text-heading mt-2">Economat</h1></div>
+            <div className="flex flex-col items-center mb-5"><LogoFull variant="color" height={88} /></div>
             <div className="card rounded-2xl p-6">
               <div className="grid grid-cols-2 gap-2 p-1 rounded-xl mb-5" style={{ background: 'var(--surface-2)' }}>
                 <button type="button" onClick={() => switchTo('app')} className="flex items-center justify-center gap-2 py-2 rounded-lg text-sm font-semibold"

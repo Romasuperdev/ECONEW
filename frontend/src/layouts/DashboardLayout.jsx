@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { LogoMark } from '../components/Logo'
@@ -8,6 +8,8 @@ import YearSelector from '../components/YearSelector'
 import SocieteSelector from '../components/SocieteSelector'
 import EtablissementSelector from '../components/EtablissementSelector'
 import RoleSwitcher from '../components/RoleSwitcher'
+import YearLockBanner from '../components/YearLockBanner'
+import { useYearLock } from '../hooks/useYearLock'
 
 const nav = [
   { to: '/', label: 'Tableau de bord', icon: 'dashboard', end: true },
@@ -17,6 +19,7 @@ const nav = [
       { to: '/configuration/annees', label: 'Années scolaires', ability: 'config.manage' },
       { to: '/configuration/niveaux', label: 'Niveaux', ability: 'config.manage' },
       { to: '/configuration/classes', label: 'Classes', ability: 'config.manage' },
+      { to: '/configuration/dossiers-frais', label: 'Dossiers & frais annexes', ability: 'tarifs.manage' },
       { to: '/configuration/caisses', label: 'Caisses', ability: 'treasury.view' },
       { to: '/configuration/utilisateurs', label: 'Affectation Caisse - Utilisateurs', ability: 'users.manage' },
       { to: '/configuration/sms', label: 'SMS', ability: 'config.manage' },
@@ -26,11 +29,8 @@ const nav = [
   {
     group: 'Fichier de base', icon: 'package',
     children: [
-      { to: '/fichier-base/bus', label: 'Cars de transport', ability: 'services.manage' },
-      { to: '/fichier-base/chauffeurs', label: 'Chauffeurs', ability: 'services.manage' },
-      { to: '/fichier-base/destinations', label: 'Destinations', ability: 'services.manage' },
       {
-        group: 'Grilles',
+        group: 'Grilles tarifaires',
         children: [
           { to: '/fichier-base/grille-scolarite', label: 'Grille scolarité', ability: 'config.manage' },
           { to: '/fichier-base/grille-transport', label: 'Grille transport', ability: 'services.manage' },
@@ -38,13 +38,30 @@ const nav = [
           { to: '/fichier-base/grille-pension', label: 'Grille pension', ability: 'services.manage' },
         ],
       },
+      {
+        group: 'Transport',
+        children: [
+          { to: '/fichier-base/bus', label: 'Cars de transport', ability: 'services.manage' },
+          { to: '/fichier-base/chauffeurs', label: 'Chauffeurs', ability: 'services.manage' },
+          { to: '/fichier-base/destinations', label: 'Destinations', ability: 'services.manage' },
+        ],
+      },
     ],
   },
   {
     group: 'Traitement', icon: 'invoices',
     children: [
+      // 1. Cycle de l'élève
       { to: '/traitement/inscription', label: 'Inscription', ability: 'students.manage' },
       { to: '/traitement/remise', label: 'Remise', ability: 'students.manage' },
+      {
+        group: 'Dossiers & frais',
+        children: [
+          { to: '/traitement/reception-dossiers', label: 'Réception des dossiers', ability: 'dossiers.manage' },
+          { to: '/traitement/consultation-dossiers', label: 'Consultation des paiements', ability: 'dossiers.manage' },
+        ],
+      },
+      // 2. Services
       {
         group: 'Transport',
         children: [
@@ -71,27 +88,41 @@ const nav = [
           { to: '/traitement/reinscription-pension', label: 'Réinscription pension', ability: 'services.manage' },
         ],
       },
+      // 3. Encaissement
       {
-        group: 'Paiement',
+        group: 'Paiement (caisse)',
         children: [
           { to: '/traitement/ouverture-caisse', label: 'Ouverture de caisse', ability: 'versements.create' },
           { to: '/traitement/nouveau-paiement', label: 'Nouveau paiement', ability: 'versements.create' },
           { to: '/traitement/fermeture-caisse', label: 'Fermeture de caisse', ability: 'versements.create' },
           { to: '/traitement/point-caisse', label: 'Point de caisse', ability: 'versements.create' },
+          { to: '/traitement/point-caisse-detaille', label: 'Point de caisse détaillé', ability: 'versements.create' },
+        ],
+      },
+      // 4. États & rapports
+      {
+        group: 'États & rapports',
+        children: [
           { to: '/traitement/etat-paiements', label: 'État des paiements', ability: 'reports.view' },
           { to: '/traitement/etat-paiements-periodiques', label: 'État périodiques détaillés', ability: 'reports.view' },
           { to: '/traitement/etat-paiements-cumules', label: 'État des paiements cumulés', ability: 'reports.view' },
+          { to: '/traitement/previsionnels-etat', label: "Paiements prévisionnels de l'État", ability: 'reports.view' },
+          { to: '/traitement/chiffre-affaire', label: "Chiffre d'affaires", ability: 'reports.view' },
         ],
       },
+      // 5. Communication
+      { to: '/traitement/communication', label: 'SMS & E-mail', ability: 'reports.view' },
+      // 6. Fin de cycle
+      { to: '/traitement/depart', label: 'Départ', ability: 'departs.manage' },
     ],
   },
-  { to: '/factures', label: 'Paiements', icon: 'invoices', ability: 'invoices.manage' },
-  { to: '/paiements', label: 'Versements', icon: 'payments', ability: 'versements.create' },
+  {
+    group: 'Outil', icon: 'settings',
+    children: [
+      { to: '/outil/eleves', label: 'Import / Export élèves', ability: 'students.manage' },
+    ],
+  },
   { to: '/depenses', label: 'Dépenses', icon: 'expenses', ability: 'expenses.manage' },
-  { to: '/fournisseurs', label: 'Fournisseurs', icon: 'suppliers', ability: 'expenses.manage' },
-  { to: '/tresorerie', label: 'Trésorerie', icon: 'treasury', ability: 'treasury.view' },
-  { to: '/salaires', label: 'Salaires', icon: 'salaries', ability: 'users.manage' },
-  { to: '/rapports', label: 'Rapports', icon: 'reports', ability: 'reports.view' },
   { to: '/activite', label: 'Mon activité', icon: 'audit' },
   { to: '/parametres', label: 'Paramètres', icon: 'settings' },
 ]
@@ -153,9 +184,15 @@ function NavGroup({ item, can, depth = 0 }) {
 export default function DashboardLayout() {
   const { user, logout, can } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [open, setOpen] = useState(false)
+  const { locked, level, label } = useYearLock()
   const handleLogout = async () => { await logout(); navigate('/login', { replace: true }) }
   const societe = user?.societes?.[0]?.name
   const roleLabel = { super_admin: 'Super Admin', directeur: 'Directeur', comptable: 'Comptable', caissier: 'Caissier', econome: 'Économe', secretaire: 'Secrétaire', auditeur: 'Auditeur' }
+
+  // Ferme le tiroir à chaque changement de page (mobile).
+  useEffect(() => { setOpen(false) }, [location.pathname])
 
   const visible = (i) => {
     if (i.group) return itemVisible(i, can)
@@ -166,13 +203,18 @@ export default function DashboardLayout() {
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-64 flex flex-col fixed h-full" style={{ background: 'var(--sidebar)', color: 'var(--sidebar-text)' }}>
+      {/* Voile mobile */}
+      {open && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setOpen(false)} />}
+
+      <aside className={`w-64 flex flex-col fixed h-full z-40 transition-transform duration-200 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        style={{ background: 'var(--sidebar)', color: 'var(--sidebar-text)' }}>
         <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}>
           <LogoMark size={38} />
           <div className="leading-tight">
-            <div className="text-lg font-extrabold text-white">Economat</div>
+            <div className="text-base font-extrabold text-white tracking-tight">NEXORA <span className="font-semibold opacity-90">ECONOMAT</span></div>
             <div className="text-[10px] opacity-70 truncate max-w-[150px]">{societe || 'Établissement'}</div>
           </div>
+          <button onClick={() => setOpen(false)} className="ml-auto lg:hidden text-white/80 text-2xl leading-none" aria-label="Fermer le menu">&times;</button>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {nav.filter(visible).map((item, idx) => (
@@ -187,17 +229,27 @@ export default function DashboardLayout() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 ml-64">
-        <div className="sticky top-0 z-20 flex items-center justify-end gap-3 px-8 py-3 flex-wrap"
+
+      <main className="flex-1 lg:ml-64 min-w-0">
+        <div className="sticky top-0 z-20 flex items-center gap-3 px-4 sm:px-6 lg:px-8 py-3 flex-wrap"
           style={{ background: 'color-mix(in srgb, var(--bg) 80%, transparent)', backdropFilter: 'blur(8px)', borderBottom: '1px solid var(--border)' }}>
-          <RoleSwitcher />
-          <YearSelector />
-          <SocieteSelector />
-          <EtablissementSelector />
-          <ThemeSwitcher compact />
+          <button onClick={() => setOpen(true)} className="lg:hidden p-2 rounded-lg" style={{ border: '1px solid var(--border)' }} aria-label="Ouvrir le menu">
+            <Icon name="menu" size={20} />
+          </button>
+          <div className="flex-1 min-w-0 lg:hidden font-extrabold text-heading truncate">NEXORA <span className="font-semibold opacity-80">ECONOMAT</span></div>
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap ml-auto">
+            <RoleSwitcher />
+            <YearSelector />
+            <SocieteSelector />
+            <EtablissementSelector />
+            <ThemeSwitcher compact />
+          </div>
         </div>
-        <div className="p-8 pt-6">
-          <Outlet />
+        <div className="p-4 sm:p-6 lg:p-8 lg:pt-6">
+          <div className={`mx-auto w-full max-w-6xl ${locked ? 'year-locked' : ''}`}>
+            <YearLockBanner level={level} label={label} />
+            <Outlet />
+          </div>
         </div>
       </main>
     </div>

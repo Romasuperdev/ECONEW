@@ -5,7 +5,7 @@ import PageHeader from '../components/PageHeader'
 import Icon from '../components/Icon'
 import { apiError } from '../utils/apiError'
 
-const empty = { immatriculation: '', marque: '', modele: '', conducteur: '', itineraire: '', destination: '', nb_places: '', couleur: '', carburant: '', num_serie: '' }
+const empty = { immatriculation: '', marque: '', modele: '', conducteur: '', destination: '', nb_places: '', couleur: '', carburant: '', num_serie: '' }
 
 export default function BusPage() {
   const [items, setItems] = useState([])
@@ -39,13 +39,12 @@ export default function BusPage() {
       <Card className="overflow-hidden">
         {loading ? <EmptyState message="Chargement…" /> : items.length === 0 ? <EmptyState message="Aucun car." /> : (
           <table className="w-full text-sm">
-            <thead className="bg-brand-50 text-left text-ink"><tr><th className="px-4 py-2">Immatriculation</th><th>Marque</th><th>Itinéraire</th><th>Destination</th><th>Places</th><th></th></tr></thead>
+            <thead className="bg-brand-50 text-left text-ink"><tr><th className="px-4 py-2">Immatriculation</th><th>Marque</th><th>Destination</th><th>Places</th><th></th></tr></thead>
             <tbody>
               {items.map((b) => (
                 <tr key={b.id ?? b.immatriculation} className="border-t hover:bg-brand-50">
                   <td className="px-4 py-2 font-mono text-xs">{b.immatriculation}</td>
                   <td className="font-medium">{b.marque} {b.modele}</td>
-                  <td>{b.itineraire || '—'}</td>
                   <td>{b.destination || '—'}</td>
                   <td className="text-ink">{b.nb_places ?? '—'}</td>
                   <td className="text-right px-4 space-x-3 whitespace-nowrap">
@@ -58,26 +57,43 @@ export default function BusPage() {
           </table>
         )}
       </Card>
-      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Modifier le car' : 'Nouveau car'}>
-        <form onSubmit={save} className="space-y-4">
-          <Input label="Immatriculation" value={form.immatriculation} onChange={(e) => set('immatriculation', e.target.value)} required />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Marque" value={form.marque} onChange={(e) => set('marque', e.target.value)} />
-            <Input label="Modèle" value={form.modele} onChange={(e) => set('modele', e.target.value)} />
-          </div>
-          <Input label="Conducteur" value={form.conducteur} onChange={(e) => set('conducteur', e.target.value)} />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Itinéraire" value={form.itineraire} onChange={(e) => set('itineraire', e.target.value)} />
-            <Input label="Destination" value={form.destination} onChange={(e) => set('destination', e.target.value)} />
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <Input label="Nb places" type="number" value={form.nb_places} onChange={(e) => set('nb_places', e.target.value)} />
-            <Input label="Couleur" value={form.couleur} onChange={(e) => set('couleur', e.target.value)} />
-            <Input label="Carburant" value={form.carburant} onChange={(e) => set('carburant', e.target.value)} />
-          </div>
-          <Input label="N° de série" value={form.num_serie} onChange={(e) => set('num_serie', e.target.value)} />
+      <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Modifier le car' : 'Nouveau car'} size="xl" cols={1}>
+        <form onSubmit={save} className="space-y-6">
+          {/* Identification */}
+          <section>
+            <div className="text-sm font-bold text-heading mb-3">Identification</div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Input label="Immatriculation" value={form.immatriculation} onChange={(e) => set('immatriculation', e.target.value)} placeholder="1234 AB 01" required />
+              <Input label="N° de série" value={form.num_serie} onChange={(e) => set('num_serie', e.target.value)} />
+              <Input label="Marque" value={form.marque} onChange={(e) => set('marque', e.target.value)} placeholder="Toyota" />
+              <Input label="Modèle" value={form.modele} onChange={(e) => set('modele', e.target.value)} placeholder="Coaster" />
+            </div>
+          </section>
+
+          {/* Exploitation */}
+          <section>
+            <div className="text-sm font-bold text-heading mb-3">Exploitation</div>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <Input label="Conducteur" value={form.conducteur} onChange={(e) => set('conducteur', e.target.value)} />
+              <Input label="Destination" value={form.destination} onChange={(e) => set('destination', e.target.value)} />
+            </div>
+          </section>
+
+          {/* Caractéristiques */}
+          <section>
+            <div className="text-sm font-bold text-heading mb-3">Caractéristiques</div>
+            <div className="grid sm:grid-cols-3 gap-4">
+              <Input label="Nombre de places" type="number" value={form.nb_places} onChange={(e) => set('nb_places', e.target.value)} />
+              <Input label="Couleur" value={form.couleur} onChange={(e) => set('couleur', e.target.value)} />
+              <Input label="Carburant" value={form.carburant} onChange={(e) => set('carburant', e.target.value)} />
+            </div>
+          </section>
+
           {error && <div className="text-sm text-red-600">{error}</div>}
-          <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button><Button type="submit">Enregistrer</Button></div>
+          <div className="flex justify-end gap-2 pt-2 border-t" style={{ borderColor: 'var(--border)' }}>
+            <Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button>
+            <Button type="submit">Enregistrer</Button>
+          </div>
         </form>
       </Modal>
     </>

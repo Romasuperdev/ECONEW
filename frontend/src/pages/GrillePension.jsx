@@ -56,7 +56,9 @@ export default function GrillePension() {
                   <td className="text-right font-semibold">{formatMoney(g.montant_total)}</td>
                   <td className="text-ink">{g.nb_versements ?? '—'}</td>
                   <td className="text-right px-4 space-x-3 whitespace-nowrap">
-                    <button onClick={() => openEdit(g)} className="hover:underline" style={{ color: 'var(--teal)' }}>Modifier</button>
+                    {g.id
+                      ? <button onClick={() => openEdit(g)} className="hover:underline" style={{ color: 'var(--teal)' }}>Modifier</button>
+                      : <span className="text-xs text-gray-400" title="Ligne héritée sans identifiant : non modifiable">Modifier</span>}
                     <button onClick={() => remove(g)} className="text-red-600 hover:underline">Suppr.</button>
                   </td>
                 </tr>

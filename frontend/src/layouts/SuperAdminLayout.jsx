@@ -1,4 +1,5 @@
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { LogoMark } from '../components/Logo'
 import Icon from '../components/Icon'
@@ -11,25 +12,35 @@ const nav = [
   { to: '/super/utilisateurs', label: 'Utilisateurs', icon: 'students' },
   { to: '/super/applications', label: 'Applications', icon: 'plans' },
   { to: '/super/abonnements', label: 'Abonnements', icon: 'package' },
+  { to: '/super/facturation', label: 'Facturation', icon: 'invoices' },
   { to: '/super/formules', label: 'Formules', icon: 'plans' },
   { to: '/super/affectations', label: 'Affectations', icon: 'link' },
+  { to: '/super/affectations-etab', label: 'Affect. établissement', icon: 'building' },
+  { to: '/super/parametres', label: 'Paramètres système', icon: 'settings' },
   { to: '/super/audit', label: "Journal d'audit", icon: 'audit' },
 ]
 
 export default function SuperAdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const [open, setOpen] = useState(false)
   const handleLogout = async () => { await logout(); navigate('/login', { replace: true }) }
+  useEffect(() => { setOpen(false) }, [location.pathname])
 
   return (
     <div className="min-h-screen flex">
-      <aside className="w-64 flex flex-col fixed h-full" style={{ background: 'var(--sidebar-2)', color: 'var(--sidebar-text)' }}>
+      {open && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setOpen(false)} />}
+
+      <aside className={`w-64 flex flex-col fixed h-full z-40 transition-transform duration-200 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+        style={{ background: 'var(--sidebar-2)', color: 'var(--sidebar-text)' }}>
         <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}>
           <LogoMark size={38} />
           <div className="leading-tight">
-            <div className="text-lg font-extrabold text-white">Economat</div>
+            <div className="text-base font-extrabold text-white tracking-tight">NEXORA <span className="font-semibold opacity-90">ECONOMAT</span></div>
             <div className="text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>CONSOLE PLATEFORME</div>
           </div>
+          <button onClick={() => setOpen(false)} className="ml-auto lg:hidden text-white/80 text-2xl leading-none" aria-label="Fermer le menu">&times;</button>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {nav.map((item) => (
@@ -51,8 +62,20 @@ export default function SuperAdminLayout() {
           </button>
         </div>
       </aside>
-      <main className="flex-1 ml-64 p-8">
-        <Outlet />
+
+      <main className="flex-1 lg:ml-64 min-w-0">
+        <div className="sticky top-0 z-20 flex items-center gap-3 px-4 sm:px-6 py-3 lg:hidden"
+          style={{ background: 'color-mix(in srgb, var(--bg) 85%, transparent)', backdropFilter: 'blur(8px)', borderBottom: '1px solid var(--border)' }}>
+          <button onClick={() => setOpen(true)} className="p-2 rounded-lg" style={{ border: '1px solid var(--border)' }} aria-label="Ouvrir le menu">
+            <Icon name="menu" size={20} />
+          </button>
+          <div className="font-extrabold text-heading truncate">NEXORA <span className="font-semibold opacity-80">ECONOMAT</span></div>
+        </div>
+        <div className="p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto w-full max-w-6xl">
+            <Outlet />
+          </div>
+        </div>
       </main>
     </div>
   )

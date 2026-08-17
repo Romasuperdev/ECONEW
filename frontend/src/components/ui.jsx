@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { statusColors } from '../utils/format'
 
 export function Card({ children, className = '' }) {
@@ -45,6 +46,14 @@ const MODAL_SIZES = {
 }
 
 export function Modal({ open, onClose, title, children, size = 'xl', cols = 2 }) {
+  // Fermeture par la touche Échap (Escape) tant que la modale est ouverte.
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e) => { if (e.key === 'Escape') { e.stopPropagation(); onClose?.() } }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   if (!open) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(8,14,26,.5)', backdropFilter: 'blur(3px)' }} onClick={onClose}>
