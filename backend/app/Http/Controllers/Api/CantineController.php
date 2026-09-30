@@ -10,6 +10,7 @@ use App\Support\AnneeContext;
 use App\Support\SocieteContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class CantineController extends Controller
 {
@@ -108,15 +109,22 @@ class CantineController extends Controller
 
         $niveau = $data['code_niveau'] ?? $eleve->CodeNiveau;
 
-        // Montant : fourni, sinon depuis la grille (niveau + mode + nb mois)
+        // Montant : fourni, sinon depuis la grille cantine du fichier de base
+        // (ECO_GRILLE_CANTINE), sinon l'ancienne grille par niveau si elle existe.
         $montant = $data['montant_annee'] ?? null;
+        $tarif = null;
         if ($montant === null) {
-            $grille = GrilleCantine::forTenant()
-                ->where('CodeNiveau', $niveau)
-                ->when($data['mode'] ?? null, fn ($q, $m) => $q->where('ModePaiement', $m))
-                ->when($data['nbr_mois'] ?? null, fn ($q, $n) => $q->where('NbrMois', $n))
-                ->first();
-            $montant = $grille ? (float) $grille->Montant : 0;
+            $tarif = $this->tarifCourant();
+            if ($tarif) {
+                $montant = (float) ($tarif->MONTANT_ANNEE ?? 0);
+            } else {
+                $montant = $this->montantGrilleNiveau($niveau, $data['mode'] ?? null, $data['nbr_mois'] ?? null);
+            }
+        }
+        if ($montant === null || $montant <= 0) {
+            return response()->json([
+                'message' => "Aucun tarif cantine défini pour cet établissement. Renseignez-le dans Fichier de base › Grilles tarifaires › Grille cantine.",
+            ], 422);
         }
 
         $c = new Cantine();
@@ -128,6 +136,10 @@ class CantineController extends Controller
         $c->Montant = (int) round($montant);
         $c->MontantAnnee = $montant;
         $c->MontantInscription = $data['montant_inscription'] ?? null;
+        if ($tarif) {
+            $c->MontantPeriode = $tarif->MONTANT_MOIS !== null ? (int) round((float) $tarif->MONTANT_MOIS) : null;
+            $c->GrilleTarifaire = (string) $tarif->id;
+        }
         $c->PAIEMENT = 0;
         $c->NbreVersement = 0;
         $c->Statut = 1;
@@ -166,6 +178,47 @@ class CantineController extends Controller
                 'cantine' => $c->load('eleve')->toNormalized(),
             ], 201);
         });
+    }
+
+    /**
+     * Tarif cantine de l'établissement courant (ECO_GRILLE_CANTINE, saisi dans
+     * « Grille cantine ») : de préférence celui de l'année courante, sinon le plus récent.
+     */
+    private function tarifCourant(): ?object
+    {
+        try {
+            if (! Schema::connection('economat')->hasTable('ECO_GRILLE_CANTINE')) {
+                return null;
+            }
+            $annee = AnneeContext::current();
+            return DB::connection('economat')->table('ECO_GRILLE_CANTINE')
+                ->when(SocieteContext::current(), fn ($q, $s) => $q->where('CODESOCIETE', $s))
+                ->when(\App\Support\EtablissementContext::current(), fn ($q, $e) => $q->where('CODEETABLISSEMENT', $e))
+                ->where('MONTANT_ANNEE', '>', 0)
+                ->orderByRaw('CASE WHEN ANNEE = ? THEN 0 ELSE 1 END', [(string) $annee])
+                ->orderByDesc('id')
+                ->first();
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Ancienne grille par niveau (T_GRILLECANTINE). Selon les bases, cette table
+     * n'a pas les colonnes attendues (CodeNiveau, CODESOCIETE…) : on ignore alors.
+     */
+    private function montantGrilleNiveau(?string $niveau, ?string $mode, $nbrMois): ?float
+    {
+        try {
+            $grille = GrilleCantine::forTenant()
+                ->where('CodeNiveau', $niveau)
+                ->when($mode, fn ($q, $m) => $q->where('ModePaiement', $m))
+                ->when($nbrMois, fn ($q, $n) => $q->where('NbrMois', $n))
+                ->first();
+            return $grille ? (float) $grille->Montant : null;
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 
     private function grilleRules(Request $request): array

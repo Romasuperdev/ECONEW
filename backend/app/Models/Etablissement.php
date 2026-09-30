@@ -57,13 +57,30 @@ class Etablissement extends Model
         }
     }
 
-    /** Etablissements de la societe courante, avec repli sur tous si le filtre ne donne rien. */
+    /**
+     * Etablissements visibles par l'utilisateur courant.
+     * - Utilisateur normal : STRICTEMENT ceux de sa société (plus de repli global),
+     *   restreints à ses établissements affectés (ECO_USER_ETAB) s'il en a.
+     * - Super administrateur (console) : ceux de la société sélectionnée via
+     *   l'en-tête X-Societe, sinon toutes les sociétés (vue plateforme légitime).
+     */
     public static function available()
     {
         try {
+            $u = auth()->user();
+            $isSuper = $u && method_exists($u, 'isSuperAdmin') && $u->isSuperAdmin();
+            if ($isSuper) {
+                $header = request()?->header('X-Societe');
+                return ($header !== null && $header !== '')
+                    ? static::forSociete()->get()
+                    : static::query()->get();
+            }
             $rows = static::forSociete()->get();
-            if ($rows->isEmpty()) {
-                $rows = static::query()->get();
+            // Utilisateur affecté à des établissements précis : uniquement ceux-là.
+            $affectes = $u ? \App\Support\UserEtablissements::codesFor($u->getAuthIdentifier()) : [];
+            if (! empty($affectes)) {
+                $col = static::codeColumn();
+                $rows = $rows->filter(fn ($e) => in_array((string) $e->{$col}, $affectes, true))->values();
             }
             return $rows;
         } catch (\Throwable $e) {
@@ -97,6 +114,75 @@ class Etablissement extends Model
             'name' => $this->pick(['RAISONSOCIALE', 'RaisonSociale', 'NOMETABLISSEMENT', 'NomEtablissement', 'LIBELLE', 'Libelle', 'NOM', 'Nom']) ?? $code,
             'ville' => $this->pick(['SOUS_PREFECTURE', 'VILLE', 'Ville']),
             'type' => $this->pick(['TYPE', 'Type']),
+            // Coordonnées (en-tête des reçus / documents)
+            'adresse' => $this->pick(['ADRESSE', 'Adresse']),
+            'telephone' => $this->pick(['TELEPHONE', 'Telephone']),
+            'email' => $this->pick(['EMAIL', 'Email']),
+            'site_web' => $this->pick(['SITEWEB', 'SiteWeb']),
+        ];
+    }
+
+    /**
+     * Toutes les colonnes réelles de T_ETABLISSEMENT (tolérant aux absences).
+     * Utilisé par la console pour afficher la fiche complète d'un établissement.
+     */
+    public function toFull(): array
+    {
+        $g = fn (string $c) => $this->pick([$c]);
+        return [
+            'num' => $g('Num'),
+            'code' => $g('CODE'),
+            'raison_sociale' => $g('RAISONSOCIALE'),
+            'adresse' => $g('ADRESSE'),
+            'telephone' => $g('TELEPHONE'),
+            'fax' => $g('FAX'),
+            'email' => $g('EMAIL'),
+            'site_web' => $g('SITEWEB'),
+            'type' => $g('TYPE'),
+            'nbre_eleves' => $g('NBREELEVES'),
+            'nom_resp' => $g('NOMRESP'),
+            'prenom_resp' => $g('PRENOMRESP'),
+            'adresse_resp' => $g('ADRESSERESP'),
+            'contact_resp' => $g('CONTACTRESP'),
+            'occupation_resp' => $g('OCCUPATIONRESP'),
+            'statut' => $g('STATUT'),
+            'sexe' => $g('SEXE'),
+            'sous_prefecture' => $g('SOUS_PREFECTURE'),
+            'circonscription' => $g('CIRCONSCRIPTION'),
+            'code_iep' => $g('CODEIEP'),
+            'code_dren' => $g('CODEDREN'),
+            'intitule_dren' => $g('INTITULEDREN'),
+            'intitule_iep' => $g('INTITULEIEP'),
+            'email_directeur' => $g('EMAILDIRECTEUR'),
+            'nom_source' => $g('NOMSOURCE'),
+            'direction_dep' => $g('DIRECTIONDEP'),
+            'id_compta' => $g('IDCOMPTA'),
+            'nom_base_sage' => $g('NOMBASESAGE'),
+            'nom_base_bacou' => $g('NOMBASEBACOU'),
+            'compte_treso' => $g('COMPTE_TRESO'),
+            'code_jrnal' => $g('CODE_JRNAL'),
+            'compte_tiers' => $g('COMPTE_TIERS'),
+            'type_base' => $g('TYPEBASE'),
+            'compte_sco' => $g('COMPTE_SCO'),
+            'compte_tp' => $g('COMPTE_TP'),
+            'compte_cant' => $g('COMPTE_CANT'),
+            'compte_pens' => $g('COMPTE_PENS'),
+            'bool_pdt' => $g('BOOL_PDT'),
+            'liaison_caisse' => $g('LIAISONCAISSE'),
+            'base_caisse' => $g('BASECAISSE'),
+            'nom_caisse' => $g('NOMCAISSE'),
+            'rub_regroup' => $g('RUBREGROUP'),
+            'num_compte' => $g('NUMCOMPTE'),
+            'mt_1cycle' => $g('MT_1CYCLE'),
+            'mt_2cycle' => $g('MT_2CYCLE'),
+            'niv1' => $g('NIV1'),
+            'niv2' => $g('NIV2'),
+            'niv3' => $g('NIV3'),
+            'niv4' => $g('NIV4'),
+            'niv5' => $g('NIV5'),
+            'niv6' => $g('NIV6'),
+            'niv7' => $g('NIV7'),
+            'code_societe' => $g('CODESOCIETE'),
         ];
     }
 }

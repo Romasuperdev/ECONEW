@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { statusColors } from '../utils/format'
+import Icon from './Icon'
 
 export function Card({ children, className = '' }) {
   return <div className={`card rounded-2xl animate-fade-up ${className}`}>{children}</div>
@@ -28,6 +29,24 @@ export function Input({ label, className = '', ...props }) {
     <label className="block">
       {label && <span className="block text-sm font-bold text-heading mb-1.5">{label}</span>}
       <input className={`field ${className}`} {...props} />
+    </label>
+  )
+}
+
+// Champ mot de passe avec bouton « œil » pour afficher / masquer la saisie.
+export function PasswordInput({ label, className = '', ...props }) {
+  const [visible, setVisible] = useState(false)
+  const title = visible ? 'Masquer le mot de passe' : 'Afficher le mot de passe'
+  return (
+    <label className="block">
+      {label && <span className="block text-sm font-bold text-heading mb-1.5">{label}</span>}
+      <span className="relative block">
+        <input {...props} type={visible ? 'text' : 'password'} className={`field pr-11 ${className}`} />
+        <button type="button" onClick={() => setVisible((v) => !v)} aria-label={title} title={title} aria-pressed={visible}
+          className="absolute inset-y-0 right-0 flex items-center px-3 text-muted hover:text-heading">
+          <Icon name={visible ? 'eyeOff' : 'eye'} size={18} />
+        </button>
+      </span>
     </label>
   )
 }

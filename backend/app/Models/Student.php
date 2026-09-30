@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\AnneeContext;
 use App\Support\EtablissementContext;
 use App\Support\SchemaCache;
@@ -14,6 +16,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Student extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_ETUDIANT';
     protected $primaryKey = 'Matricule';
@@ -67,8 +71,9 @@ class Student extends Model
             // Filtre par année scolaire sélectionnée (isolation par exercice).
             ->when($annee && $cAnnee, fn ($x) => $x->where($cAnnee, $annee))
             ->when($societe && $cSoc, fn ($x) => $x->where($cSoc, $societe))
-            // Isolation établissement tolérante (laisse passer les lignes non rattachées).
-            ->when($etab && $cSite, fn ($x) => $x->where(fn ($w) => $w->where($cSite, $etab)->orWhereNull($cSite)));
+            // Isolation établissement STRICTE : plus de tolérance sur les lignes
+            // non rattachées (cf. schéma multi-tenant : jamais de lecture globale).
+            ->when($etab && $cSite, fn ($x) => $x->where($cSite, $etab));
     }
 
     public function getFullNameAttribute(): string

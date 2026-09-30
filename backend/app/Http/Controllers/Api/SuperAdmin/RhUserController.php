@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\RhUser;
 use App\Support\AuditLogger;
+use App\Support\UserEtablissements;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -37,19 +38,58 @@ class RhUserController extends Controller
             );
         } catch (\Throwable $e) {}
     }
+    /** Société (code) de chaque utilisateur d'après societe_utilisateur : [userId => code]. */
+    private function societesOfUsers(array $ids): array
+    {
+        try {
+            if (empty($ids) || ! Schema::connection('master')->hasTable('societe_utilisateur')) {
+                return [];
+            }
+            return DB::connection('master')->table('societe_utilisateur')
+                ->whereIn('user_id', $ids)->orderBy('id')->get()
+                ->groupBy('user_id')->map(fn ($r) => (string) $r->first()->societe_id)->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /** Enregistre la société + les établissements (hors super admin). */
+    private function syncAffectations(RhUser $u, array $data): void
+    {
+        if ($u->SuperAdmin || ! (array_key_exists('code_societe', $data) || array_key_exists('etablissements', $data))) {
+            return;
+        }
+        UserEtablissements::sync($u->Id, $data['code_societe'] ?? null, $data['etablissements'] ?? []);
+    }
+
+    private function affectationRules(): array
+    {
+        return [
+            'code_societe' => ['nullable', 'string', 'max:50'],
+            'etablissements' => ['nullable', 'array'],
+            'etablissements.*' => ['string', 'max:50'],
+        ];
+    }
+
     public function index(Request $request)
     {
         try {
-            return RhUser::query()
+            $users = RhUser::query()
                 ->when($request->search, fn ($q, $s) => $q->where(fn ($w) => $w
                     ->where('Login', 'like', "%$s%")->orWhere('Email', 'like', "%$s%")
                     ->orWhere('Nom', 'like', "%$s%")->orWhere('Prenom', 'like', "%$s%")))
-                ->orderBy('Nom')->limit(500)->get()
-                ->map(fn ($u) => [
+                ->orderBy('Nom')->limit(500)->get();
+            $ids = $users->pluck('Id')->all();
+            $etabs = UserEtablissements::codesForMany($ids);
+            $socs = $this->societesOfUsers($ids);
+
+            return $users->map(fn ($u) => [
                     'id' => $u->Id, 'name' => $u->name, 'login' => $u->Login, 'email' => $u->Email,
                     'nom' => $u->Nom, 'prenom' => $u->Prenom, 'role' => $u->role,
                     'super_admin' => (bool) $u->SuperAdmin, 'superviseur' => (bool) $u->Superviseur,
                     'validateur' => (bool) $u->Validateur, 'supprime' => (bool) $u->Supprimer,
+                    'code_societe' => $socs[$u->Id] ?? null,
+                    'etablissements' => $etabs[(string) $u->Id] ?? [],
                 ]);
         } catch (\Throwable $e) {
             return response()->json([]);
@@ -69,7 +109,9 @@ class RhUserController extends Controller
             'superviseur' => ['nullable', 'boolean'],
             'validateur' => ['nullable', 'boolean'],
             'role' => ['nullable', 'string', 'max:50'],
-        ]);
+        ] + $this->affectationRules());
+        // Contrôle AVANT création : établissements tous dans la même société.
+        UserEtablissements::assertSameSociete($data['etablissements'] ?? [], $data['code_societe'] ?? null);
 
         $u = new RhUser();
         $u->Login = $data['login'];
@@ -83,6 +125,7 @@ class RhUserController extends Controller
         $u->Validateur = ! empty($data['validateur']) ? 1 : 0;
         $u->Supprimer = 0;
         $u->save();
+        $this->syncAffectations($u, $data);
         // Rôle étendu (admin_etablissement, directeur, comptable, …) si non super admin.
         if (empty($data['super_admin']) && ! empty($data['role']) && in_array($data['role'], $this->assignableRoles(), true)) {
             $this->setExtendedRole($u->Id, $data['role']);
@@ -104,7 +147,8 @@ class RhUserController extends Controller
             'superviseur' => ['nullable', 'boolean'],
             'validateur' => ['nullable', 'boolean'],
             'role' => ['nullable', 'string', 'max:50'],
-        ]);
+        ] + $this->affectationRules());
+        UserEtablissements::assertSameSociete($data['etablissements'] ?? [], $data['code_societe'] ?? null);
         if (array_key_exists('role', $data) && $data['role'] && in_array($data['role'], $this->assignableRoles(), true)) {
             $this->setExtendedRole($rhUser->Id, $data['role']);
         }
@@ -116,6 +160,7 @@ class RhUserController extends Controller
             if (array_key_exists($in, $data)) $rhUser->{$col} = ! empty($data[$in]) ? 1 : 0;
         }
         $rhUser->save();
+        $this->syncAffectations($rhUser, $data);
 
         return response()->json(['message' => 'Utilisateur mis à jour.']);
     }

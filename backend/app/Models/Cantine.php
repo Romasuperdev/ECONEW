@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\AnneeContext;
 use App\Support\SocieteContext;
 use Illuminate\Database\Eloquent\Builder;
@@ -13,6 +15,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Cantine extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_CANTINE';
     protected $primaryKey = 'Num';

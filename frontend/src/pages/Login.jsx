@@ -1,12 +1,46 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { Button, Input } from '../components/ui'
+import api from '../api/client'
+import { Button, Input, PasswordInput } from '../components/ui'
 import { LogoMark, LogoFull } from '../components/Logo'
 import ThemeSwitcher from '../components/ThemeSwitcher'
 import Icon from '../components/Icon'
 import { apiError } from '../utils/apiError'
 import LoginBackground from '../components/LoginBackground'
+
+// Société de rattachement (et établissements) affichée sous l'identifiant.
+function AccountHint({ account, looking }) {
+  if (looking) return <div className="mt-1.5 text-xs text-muted">Recherche du compte…</div>
+  if (!account) return null
+  if (account.is_super_admin) {
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--sidebar)' }}>
+        <Icon name="globe" size={14} /> Super administrateur — console plateforme
+      </div>
+    )
+  }
+  const societes = account.societes || []
+  const etabs = account.etablissements || []
+  if (societes.length === 0 && etabs.length === 0) {
+    return <div className="mt-1.5 text-xs text-muted">Aucune société affectée à ce compte.</div>
+  }
+  return (
+    <div className="mt-1.5 rounded-lg px-3 py-2 text-xs" style={{ background: 'color-mix(in srgb, var(--accent) 12%, transparent)' }}>
+      {societes.length > 0 && (
+        <div className="flex items-center gap-1.5 font-semibold text-heading">
+          <Icon name="building" size={14} />
+          <span>Société : {societes.map((s) => s.name || s.code).join(', ')}</span>
+        </div>
+      )}
+      {etabs.length > 0 && (
+        <div className="mt-0.5 text-muted">
+          {etabs.length > 1 ? 'Établissements' : 'Établissement'} : {etabs.map((e) => e.name).join(', ')}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Login() {
   const { login, verifyOtp, logout } = useAuth()
@@ -19,6 +53,25 @@ export default function Login() {
   const [otpStep, setOtpStep] = useState(false)
   const [otp, setOtp] = useState('')
   const [otpInfo, setOtpInfo] = useState('')
+
+  // Orientation : société / établissement(s) du compte saisi (null = rien à afficher)
+  const [account, setAccount] = useState(null)
+  const [looking, setLooking] = useState(false)
+
+  useEffect(() => {
+    const id = email.trim()
+    setAccount(null)
+    if (id.length < 2) { setLooking(false); return }
+    let cancelled = false
+    setLooking(true)
+    const t = setTimeout(() => {
+      api.post('/lookup', { identifier: id })
+        .then(({ data }) => { if (!cancelled) setAccount(data?.found ? data : null) })
+        .catch(() => {})
+        .finally(() => { if (!cancelled) setLooking(false) })
+    }, 500)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [email])
 
   const switchTo = (m) => { setActive(m); setError('') }
 
@@ -58,8 +111,11 @@ export default function Login() {
           <h2 className="text-2xl font-extrabold text-heading">{isConsole ? 'Console plateforme' : 'Application école'}</h2>
         </div>
         <p className="text-muted text-base mb-2">{isConsole ? 'Espace Super Administrateur.' : 'Accédez à votre établissement.'}</p>
-        <div className="w-full text-left"><Input label="Identifiant (login ou e-mail)" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
-        <div className="w-full text-left"><Input label="Mot de passe" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required /></div>
+        <div className="w-full text-left">
+          <Input label="Identifiant (login ou e-mail)" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <AccountHint account={account} looking={looking} />
+        </div>
+        <div className="w-full text-left"><PasswordInput label="Mot de passe" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></div>
         {error && <div className="w-full text-sm text-red-600 rounded-lg p-2" style={{ background: 'rgba(220,38,38,.1)' }}>{error}</div>}
         <Button type="submit" variant={isConsole ? 'primary' : 'gold'} disabled={loading} className="w-full justify-center mt-1 text-base py-3">
           {loading ? 'Connexion…' : (isConsole ? 'Accéder à la console' : "Accéder à l'application")}

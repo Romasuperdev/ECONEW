@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\SchemaCache;
 
 use App\Support\AnneeContext;
@@ -17,6 +19,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class GrilleScolarite extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_GRILLESCOLARITE';
     public $timestamps = false;
@@ -56,15 +60,11 @@ class GrilleScolarite extends Model
     /** Liste tolérante : grilles du tenant, repli société si filtre strict vide. */
     public static function available()
     {
+        // Isolation STRICTE : uniquement le tenant courant, aucun repli global.
         try {
-            $rows = static::forTenant()->get();
-            if ($rows->isEmpty()) {
-                $soc = SocieteContext::current();
-                $rows = static::query()->when($soc, fn ($q) => $q->where('CODESOCIETE', $soc))->get();
-            }
-            return $rows;
+            return static::forTenant()->get();
         } catch (\Throwable $e) {
-            try { return static::query()->get(); } catch (\Throwable $e2) { return collect(); }
+            return collect();
         }
     }
 

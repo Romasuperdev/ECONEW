@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { LogoMark } from '../components/Logo'
 import Icon from '../components/Icon'
+import CollapseToggle from '../components/CollapseToggle'
 import ThemeSwitcher from '../components/ThemeSwitcher'
 import YearSelector from '../components/YearSelector'
 import SocieteSelector from '../components/SocieteSelector'
@@ -10,6 +11,7 @@ import EtablissementSelector from '../components/EtablissementSelector'
 import RoleSwitcher from '../components/RoleSwitcher'
 import YearLockBanner from '../components/YearLockBanner'
 import { useYearLock } from '../hooks/useYearLock'
+import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 
 const nav = [
   { to: '/', label: 'Tableau de bord', icon: 'dashboard', end: true },
@@ -97,6 +99,7 @@ const nav = [
           { to: '/traitement/fermeture-caisse', label: 'Fermeture de caisse', ability: 'versements.create' },
           { to: '/traitement/point-caisse', label: 'Point de caisse', ability: 'versements.create' },
           { to: '/traitement/point-caisse-detaille', label: 'Point de caisse détaillé', ability: 'versements.create' },
+          { to: '/traitement/historique-paiements', label: 'Historique des paiements', anyAbility: ['versements.create', 'reports.view'] },
         ],
       },
       // 4. États & rapports
@@ -130,20 +133,21 @@ const nav = [
 // Un élément (feuille ou sous-groupe) est-il visible selon les permissions ?
 function itemVisible(item, can) {
   if (item.group) return item.children.some((c) => itemVisible(c, can))
+  if (item.anyAbility) return item.anyAbility.some((a) => can(a))
   return !item.ability || can(item.ability)
 }
 
-function NavItem({ item }) {
+function NavItem({ item, collapsed }) {
   return (
-    <NavLink to={item.to} end={item.end}
-      className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${isActive ? 'font-semibold' : 'hover:bg-white/5'}`}
+    <NavLink to={item.to} end={item.end} title={collapsed ? item.label : undefined}
+      className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${isActive ? 'font-semibold' : 'hover:bg-white/5'}`}
       style={({ isActive }) => isActive ? { background: 'var(--accent)', color: 'var(--accent-ink)' } : { color: 'var(--sidebar-text)' }}>
-      {item.icon && <Icon name={item.icon} size={19} />} {item.label}
+      {item.icon && <Icon name={item.icon} size={19} />} <span className={collapsed ? 'lg:hidden' : ''}>{item.label}</span>
     </NavLink>
   )
 }
 
-function NavGroup({ item, can, depth = 0 }) {
+function NavGroup({ item, can, depth = 0, collapsed = false, onExpand }) {
   const location = useLocation()
   const children = item.children.filter((c) => itemVisible(c, can))
   const leafTos = []
@@ -155,15 +159,20 @@ function NavGroup({ item, can, depth = 0 }) {
 
   return (
     <div>
-      <button onClick={() => setOpen((o) => !o)}
-        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${activeInside ? 'font-semibold' : 'hover:bg-white/5'}`}
-        style={{ color: 'var(--sidebar-text)' }}>
+      <button title={collapsed ? item.group : undefined}
+        onClick={() => {
+          // Sidebar réduite (grand écran) : on la déplie et on ouvre le groupe.
+          if (collapsed && window.matchMedia('(min-width: 1024px)').matches) { onExpand?.(); setOpen(true); return }
+          setOpen((o) => !o)
+        }}
+        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${activeInside ? 'font-semibold' : 'hover:bg-white/5'}`}
+        style={{ color: collapsed && activeInside ? 'var(--accent)' : 'var(--sidebar-text)' }}>
         {item.icon ? <Icon name={item.icon} size={19} /> : <span style={{ width: 6 }} />}
-        <span className="flex-1 text-left">{item.group}</span>
-        <span style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+        <span className={`flex-1 text-left ${collapsed ? 'lg:hidden' : ''}`}>{item.group}</span>
+        <span className={collapsed ? 'lg:hidden' : ''} style={{ transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
       </button>
       {open && (
-        <div className="ml-4 mt-1 space-y-1 border-l pl-3" style={{ borderColor: 'rgba(255,255,255,.12)' }}>
+        <div className={`ml-4 mt-1 space-y-1 border-l pl-3 ${collapsed ? 'lg:hidden' : ''}`} style={{ borderColor: 'rgba(255,255,255,.12)' }}>
           {children.map((c, i) => (
             c.group
               ? <NavGroup key={`sg-${i}`} item={c} can={can} depth={depth + 1} />
@@ -186,6 +195,8 @@ export default function DashboardLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
+  const [collapsed, setCollapsed] = useSidebarCollapsed()
+  const mini = collapsed ? 'lg:hidden' : ''
   const { locked, level, label } = useYearLock()
   const handleLogout = async () => { await logout(); navigate('/login', { replace: true }) }
   const societe = user?.societes?.[0]?.name
@@ -206,31 +217,34 @@ export default function DashboardLayout() {
       {/* Voile mobile */}
       {open && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setOpen(false)} />}
 
-      <aside className={`w-64 flex flex-col fixed h-full z-40 transition-transform duration-200 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      <aside className={`w-64 ${collapsed ? 'lg:w-20' : ''} flex flex-col fixed h-full z-40 transition-[transform,width] duration-200 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
         style={{ background: 'var(--sidebar)', color: 'var(--sidebar-text)' }}>
-        <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+        <div className={`px-5 py-5 flex items-center gap-3 ${collapsed ? 'lg:flex-col lg:px-2' : ''}`} style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}>
           <LogoMark size={38} />
-          <div className="leading-tight">
+          <div className={`leading-tight ${mini}`}>
             <div className="text-base font-extrabold text-white tracking-tight">NEXORA <span className="font-semibold opacity-90">ECONOMAT</span></div>
             <div className="text-[10px] opacity-70 truncate max-w-[150px]">{societe || 'Établissement'}</div>
           </div>
           <button onClick={() => setOpen(false)} className="ml-auto lg:hidden text-white/80 text-2xl leading-none" aria-label="Fermer le menu">&times;</button>
+          <CollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className={`flex-1 px-3 py-4 space-y-1 overflow-y-auto ${collapsed ? 'lg:px-2' : ''}`}>
           {nav.filter(visible).map((item, idx) => (
-            item.group ? <NavGroup key={`g-${idx}`} item={item} can={can} /> : <NavItem key={item.to} item={item} />
+            item.group
+              ? <NavGroup key={`g-${idx}`} item={item} can={can} collapsed={collapsed} onExpand={() => setCollapsed(false)} />
+              : <NavItem key={item.to} item={item} collapsed={collapsed} />
           ))}
         </nav>
-        <div className="px-4 py-4" style={{ borderTop: '1px solid rgba(255,255,255,.08)' }}>
-          <div className="text-sm font-medium text-white">{user?.name}</div>
-          <div className="text-xs capitalize" style={{ color: 'var(--accent)' }}>{roleLabel[user?.role] || user?.role}</div>
-          <button onClick={handleLogout} className="mt-3 flex items-center gap-2 text-xs opacity-80 hover:opacity-100">
-            <Icon name="logout" size={15} /> Se déconnecter
+        <div className={`px-4 py-4 ${collapsed ? 'lg:px-2 lg:flex lg:justify-center' : ''}`} style={{ borderTop: '1px solid rgba(255,255,255,.08)' }}>
+          <div className={`text-sm font-medium text-white ${mini}`}>{user?.name}</div>
+          <div className={`text-xs capitalize ${mini}`} style={{ color: 'var(--accent)' }}>{roleLabel[user?.role] || user?.role}</div>
+          <button onClick={handleLogout} title="Se déconnecter" className={`mt-3 flex items-center gap-2 text-xs opacity-80 hover:opacity-100 ${collapsed ? 'lg:mt-0' : ''}`}>
+            <Icon name="logout" size={15} /> <span className={mini}>Se déconnecter</span>
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 lg:ml-64 min-w-0">
+      <main className={`flex-1 ${collapsed ? 'lg:ml-20' : 'lg:ml-64'} min-w-0 transition-[margin] duration-200`}>
         <div className="sticky top-0 z-20 flex items-center gap-3 px-4 sm:px-6 lg:px-8 py-3 flex-wrap"
           style={{ background: 'color-mix(in srgb, var(--bg) 80%, transparent)', backdropFilter: 'blur(8px)', borderBottom: '1px solid var(--border)' }}>
           <button onClick={() => setOpen(true)} className="lg:hidden p-2 rounded-lg" style={{ border: '1px solid var(--border)' }} aria-label="Ouvrir le menu">

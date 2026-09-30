@@ -4,6 +4,7 @@ import api from '../api/client'
 import { Card, Button, Input, Select, Badge, EmptyState } from '../components/ui'
 import PageHeader from '../components/PageHeader'
 import { formatMoney } from '../utils/format'
+import { printReceipt as printReceiptDoc } from '../utils/receipt'
 import { apiError } from '../utils/apiError'
 import { useAuth } from '../context/AuthContext'
 
@@ -89,15 +90,22 @@ export default function NouveauPaiementPage() {
     setSaving(true)
     try {
       const results = []
-      // Un versement par rubrique, dans la même caisse ouverte.
+      let numRecu = null
+      // Un versement par rubrique, dans la même caisse ouverte, sous UN SEUL n° de reçu.
       for (const l of lignesAPayer) {
         const { data } = await api.post('/versements', {
           matricule, montant: l.montant, mode: mode || null,
           libelle: l.rubrique, caisse: session.caisse_code || null,
+          num_recu: numRecu,
         })
+        numRecu = numRecu || data.receipt_number || null
         results.push({ ...l, receipt_number: data.receipt_number })
       }
-      setReceipt({ eleve: student?.full_name, mode: mode || '—', lignes: results, total: results.reduce((s, x) => s + x.montant, 0) })
+      setReceipt({
+        numero: numRecu, eleve: student?.full_name, matricule, mode: mode || '—',
+        caisse: session.caisse_code, caissier: user?.name, date: new Date(),
+        lignes: results, total: results.reduce((s, x) => s + x.montant, 0),
+      })
       setLignes({})
     } catch (err) {
       const errs = err.response?.data?.errors
@@ -107,54 +115,7 @@ export default function NouveauPaiementPage() {
 
   const printReceipt = () => {
     if (!receipt) return
-    const esc = (s) => String(s ?? '').replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]))
-    const rows = receipt.lignes.map((l) => `<tr>
-      <td>${esc(l.rubrique)}${l.receipt_number ? ` <span class="ref">(${esc(l.receipt_number)})</span>` : ''}</td>
-      <td style="text-align:right">${esc(formatMoney(l.montant))}</td></tr>`).join('')
-    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Reçu de versement</title>
-    <style>
-      *{font-family:'DM Sans',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-      body{color:#173a24;padding:24px;max-width:520px;margin:0 auto}
-      .head{text-align:center;border-bottom:2px solid #00A876;padding-bottom:8px;margin-bottom:14px}
-      .soc{font-size:17px;font-weight:800;color:#0c2c21;letter-spacing:.5px}
-      .sub{font-size:11px;color:#5A6B7B}
-      .etab{font-size:13px;font-weight:700;color:#00A876;margin-top:2px}
-      h1{text-align:center;font-size:16px;letter-spacing:1px;margin:6px 0 14px;color:#0c2c21}
-      .meta{font-size:12.5px;margin-bottom:10px;line-height:1.6}
-      .meta b{color:#0c2c21}
-      table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
-      th{background:#E5FFF7;color:#0c2c21;text-align:left;padding:8px;border-bottom:1px solid #b7e4c7}
-      th.r{text-align:right}
-      td{padding:8px;border-bottom:1px solid #eef3ee}
-      .ref{color:#5A6B7B;font-size:11px}
-      tr.total td{font-weight:800;border-top:2px solid #00A876;background:#f5fffb}
-      .foot{margin-top:26px;text-align:center;font-size:10.5px;color:#5A6B7B;font-style:italic}
-      .sign{margin-top:40px;display:flex;justify-content:space-between;font-size:11px;color:#5A6B7B}
-      .sign div{width:45%;text-align:center;border-top:1px solid #333;padding-top:4px}
-    </style></head><body>
-      <div class="head">
-        <div class="soc">${esc(societeName)}</div>
-        <div class="sub">Solutions de gestion scolaire — Economat</div>
-        ${etabName ? `<div class="etab">${esc(etabName)}</div>` : ''}
-      </div>
-      <h1>REÇU DE VERSEMENT</h1>
-      <div class="meta">
-        <div>Élève : <b>${esc(receipt.eleve)}</b></div>
-        <div>Mode de règlement : <b>${esc(receipt.mode)}</b></div>
-        <div>Date : <b>${esc(new Date().toLocaleString('fr-FR'))}</b></div>
-      </div>
-      <table>
-        <thead><tr><th>Rubrique</th><th class="r">Montant</th></tr></thead>
-        <tbody>${rows}
-          <tr class="total"><td>TOTAL ENCAISSÉ</td><td style="text-align:right">${esc(formatMoney(receipt.total))}</td></tr>
-        </tbody>
-      </table>
-      <div class="sign"><div>Cachet de l'établissement</div><div>Signature du caissier</div></div>
-      <div class="foot">Ce reçu fait foi de paiement. À conserver.</div>
-      <script>window.onload=function(){window.print()}</script>
-    </body></html>`
-    const w = window.open('', '_blank', 'width=680,height=800')
-    if (w) { w.document.write(html); w.document.close() }
+    printReceiptDoc({ ...receipt, societe: societeName, etablissement: etabName })
   }
 
   if (!loading && !session?.open) {
@@ -163,8 +124,18 @@ export default function NouveauPaiementPage() {
         <PageHeader title="Nouveau paiement" subtitle="Caisse fermée" />
         <Card className="p-8 max-w-lg text-center space-y-4">
           <div className="text-lg font-semibold text-heading">Caisse fermée</div>
-          <p className="text-sm text-ink">Vous devez ouvrir votre caisse avant d'enregistrer un paiement.</p>
-          <div className="flex justify-center"><Button onClick={() => navto('/traitement/ouverture-caisse')}>Ouvrir la caisse</Button></div>
+          <p className="text-sm text-ink">Aucune caisse n'est ouverte à votre nom. Vous devez ouvrir votre caisse avant d'enregistrer un paiement.</p>
+          {session?.occupee && (
+            <p className="text-sm rounded-lg px-3 py-2" style={{ background: '#fffbeb', color: '#92400e', border: '1px solid #fde68a' }}>
+              Votre caisse <strong>{session.occupee.caisse_code}</strong> est actuellement ouverte par <strong>{session.occupee.user}</strong>
+              {session.occupee.date_ouverture && <> depuis le {new Date(String(session.occupee.date_ouverture).replace(' ', 'T')).toLocaleString('fr-FR')}</>}.
+              Elle doit d'abord être fermée.
+            </p>
+          )}
+          <div className="flex justify-center gap-2">
+            <Button onClick={() => navto('/traitement/ouverture-caisse')}>Ouvrir la caisse</Button>
+            {session?.occupee && <Button variant="ghost" onClick={() => navto('/traitement/fermeture-caisse')}>Fermeture de caisse</Button>}
+          </div>
         </Card>
       </>
     )
@@ -269,20 +240,23 @@ export default function NouveauPaiementPage() {
                 Paiement enregistré ({receipt.lignes.length} rubrique{receipt.lignes.length > 1 ? 's' : ''}).
               </div>
               <div id="recu-print" className="text-sm space-y-1">
-                <div className="font-bold">Reçu de versement</div>
+                <div className="font-bold">Reçu de versement{receipt.numero ? ` n° ${receipt.numero}` : ''}</div>
                 <div>Élève : {receipt.eleve}</div>
                 <div>Mode : {receipt.mode}</div>
                 <table className="w-full mt-2 text-xs">
                   <tbody>
                     {receipt.lignes.map((l, i) => (
-                      <tr key={i}><td>{l.rubrique}{l.receipt_number ? ` (${l.receipt_number})` : ''}</td><td className="text-right">{formatMoney(l.montant)}</td></tr>
+                      <tr key={i}><td>{l.rubrique}</td><td className="text-right">{formatMoney(l.montant)}</td></tr>
                     ))}
                     <tr className="border-t font-bold" style={{ borderColor: 'var(--border)' }}><td>Total</td><td className="text-right">{formatMoney(receipt.total)}</td></tr>
                   </tbody>
                 </table>
-                <div>Date : {new Date().toLocaleString('fr-FR')}</div>
+                <div>Date : {receipt.date.toLocaleString('fr-FR')}</div>
               </div>
-              <Button variant="ghost" className="mt-2" onClick={printReceipt}>Imprimer le reçu</Button>
+              <div className="flex gap-2 mt-2">
+                <Button variant="ghost" onClick={printReceipt}>Imprimer le reçu</Button>
+                <Button variant="ghost" onClick={() => navto('/traitement/historique-paiements')}>Historique des paiements</Button>
+              </div>
             </div>
           )}
         </Card>

@@ -65,7 +65,8 @@ export default function InscriptionServicePage({ base = '/cantine', label = 'Can
               {rows.map((r, i) => (
                 <tr key={r.id ?? i} className="border-t hover:bg-brand-50">
                   <td className="px-4 py-2 font-mono text-xs">{r.matricule}</td>
-                  <td className="font-medium">{r.full_name || r.student || `${r.matricule}`}</td>
+                  {/* `student` est un objet { matricule, full_name } (ou une chaîne selon l'API). */}
+                  <td className="font-medium">{r.full_name || r.student?.full_name || (typeof r.student === 'string' ? r.student : '') || studByMat[String(r.matricule)]?.full_name || r.matricule}</td>
                 </tr>
               ))}
             </tbody>

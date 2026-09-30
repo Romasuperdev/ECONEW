@@ -49,7 +49,7 @@ class DocumentController extends Controller
         $versement->load('eleve');
         $n = $versement->toNormalized();
         $pdf = Pdf::loadView('pdf.versement', [
-            'recu' => $n['receipt_number'] ?? $versement->NUM,
+            'recu' => $n['receipt_number'] ?? $versement->getKey(),
             'montant' => $n['amount'] ?? 0,
             'devise' => 'XOF',
             'eleve' => $versement->eleve?->full_name ?? '',
@@ -59,6 +59,6 @@ class DocumentController extends Controller
             'libelle' => $n['libelle'] ?? '',
             'societe' => $societe ?? 'Etablissement',
         ]);
-        return $pdf->download('Recu-'.($n['receipt_number'] ?? $versement->NUM).'.pdf');
+        return $pdf->download('Recu-'.($n['receipt_number'] ?? $versement->getKey()).'.pdf');
     }
 }

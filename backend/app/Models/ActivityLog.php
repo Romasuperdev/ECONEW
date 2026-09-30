@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\SocieteContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -9,6 +11,8 @@ use Illuminate\Database\Eloquent\Model;
 /** Journal d'activite (table ECONOMAT : ECO_AUDIT). */
 class ActivityLog extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'ECO_AUDIT';
     protected $primaryKey = 'ID';

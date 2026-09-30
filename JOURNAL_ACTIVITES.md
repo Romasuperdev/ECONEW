@@ -199,3 +199,44 @@ Enregistrement automatique de toutes les écritures effectuées dans l'applicati
 | 2026-08-11 11:39:58 | Romaric Kouame | directeur | - / AUR01 | Création | POST /api/versements | 201 |
 | 2026-08-11 11:41:56 | Romaric Kouame | directeur | - / AUR01 | Création | POST /api/communication/mail | 200 |
 | 2026-08-11 11:48:41 | Romaric Kouame | directeur | - / AUR01 | Modification | PUT /api/students/26012250G | 200 |
+| 2026-08-17 10:40:42 | Romaric Kouame | directeur | AURIAK / AUR01 | Création | POST /api/login | 200 |
+| 2026-08-17 10:46:25 | Yves Romaric KOUAME | admin_etablissement | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-08-17 10:46:35 | Administrateur Système | super_admin | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-08-17 11:20:44 | Romaric Kouame | directeur | - / AUR01 | Création | POST /api/expenses | 201 |
+| 2026-08-17 11:53:59 | Yassine KONE | directeur | - / - | Création | POST /api/login | 200 |
+| 2026-08-17 11:56:08 | Yassine KONE | directeur | - / - | Création | POST /api/login | 200 |
+| 2026-08-17 15:37:48 | Romaric Kouame | directeur | ABN / AUR01 | Création | POST /api/login | 200 |
+| 2026-08-19 13:47:57 | Romaric Kouame | directeur | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-04 15:27:03 | Yves Romaric KOUAME | admin_etablissement | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-07 10:17:56 | Administrateur Système | super_admin | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-07 10:39:08 | Administrateur Système | super_admin | AURIAK / AUR01 | Modification | PUT /api/super/rh-users/2 | 200 |
+| 2026-09-07 10:39:19 | FLORE ENERSTINE MOBIO | caissier | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-07 10:40:18 | Administrateur Système | super_admin | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-07 11:15:47 | Administrateur Système | super_admin | AURIAK / AUR01 | Création | POST /api/super/rh-users | 201 |
+| 2026-09-07 11:35:42 | FLORE ENERSTINE MOBIO | caissier | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-14 16:07:30 | Administrateur Système | super_admin | AURIAK / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-15 09:27:19 | Administrateur Système | super_admin | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-28 09:42:15 | Administrateur Système | super_admin | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-28 09:46:58 | menan kouassi | admin_etablissement | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-28 09:47:23 | Administrateur Système | super_admin | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-28 09:48:19 | Administrateur Système | super_admin | AURIAK / AUR01 | Modification | PUT /api/super/rh-users/22 | 200 |
+| 2026-09-28 09:48:28 | Yves Romaric | directeur | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-28 10:20:20 | Administrateur Système | super_admin | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-28 10:37:58 | Administrateur Système | super_admin | AURIAK / AUR01 | Modification | PUT /api/super/rh-users/22 | 200 |
+| 2026-09-28 10:38:58 | Administrateur Système | super_admin | AURIAK / AUR01 | Modification | PUT /api/super/rh-users/22 | 200 |
+| 2026-09-28 10:45:52 | Anonyme | - | - / AUR01 | Création | POST /api/lookup | 200 |
+| 2026-09-28 10:45:53 | Anonyme | - | - / AUR01 | Création | POST /api/lookup | 200 |
+| 2026-09-28 10:46:05 | Anonyme | - | - / AUR01 | Création | POST /api/lookup | 200 |
+| 2026-09-28 10:46:06 | Anonyme | - | - / AUR01 | Création | POST /api/lookup | 200 |
+| 2026-09-28 10:46:08 | Anonyme | - | - / AUR01 | Création | POST /api/lookup | 200 |
+| 2026-09-28 10:46:13 | Anonyme | - | - / AUR01 | Création | POST /api/lookup | 200 |
+| 2026-09-28 10:50:43 | Administrateur Système | super_admin | AURIAK / AUR01 | Modification | PUT /api/super/rh-users/22 | 200 |
+| 2026-09-28 10:51:28 | Anonyme | - | - / AUR01 | Création | POST /api/lookup | 200 |
+| 2026-09-28 10:51:38 | Yves Romaric | directeur | - / AUR01 | Création | POST /api/login | 200 |
+| 2026-09-28 11:19:08 | Yves Romaric | directeur | AURIAK / AUR01 | Création | POST /api/cantine | 201 |
+| 2026-09-28 11:44:29 | Yves Romaric | directeur | AURIAK / AUR01 | Création | POST /api/caisse-session/close | 200 |
+| 2026-09-28 11:53:38 | Yves Romaric | directeur | AURIAK / AUR01 | Création | POST /api/caisse-session/open | 201 |
+| 2026-09-28 12:03:51 | Yves Romaric | directeur | AURIAK / AUR01 | Création | POST /api/versements | 201 |
+| 2026-09-28 12:03:51 | Yves Romaric | directeur | AURIAK / AUR01 | Création | POST /api/versements | 201 |
+| 2026-09-28 12:03:51 | Yves Romaric | directeur | AURIAK / AUR01 | Création | POST /api/versements | 201 |
+| 2026-09-28 12:03:51 | Yves Romaric | directeur | AURIAK / AUR01 | Création | POST /api/versements | 201 |

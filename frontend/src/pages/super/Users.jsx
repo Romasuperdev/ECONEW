@@ -23,7 +23,7 @@ const roleToFlags = (r) => ({
   superviseur: r === 'comptable',
 })
 const currentRole = (u) => u.role || (u.super_admin ? 'super_admin' : u.validateur ? 'directeur' : u.superviseur ? 'comptable' : 'caissier')
-const empty = { login: '', password: '', nom: '', prenom: '', email: '', contact: '', role: 'caissier' }
+const empty = { login: '', password: '', nom: '', prenom: '', email: '', contact: '', role: 'caissier', code_societe: '', etablissements: [] }
 
 export default function Users() {
   const [items, setItems] = useState([])
@@ -43,20 +43,52 @@ export default function Users() {
   const [modSaving, setModSaving] = useState(false)
   const [modError, setModError] = useState('')
 
+  // Sociétés (US_SOCIETE) et établissements (T_ETABLISSEMENT) pour les affectations
+  const [societes, setSocietes] = useState([])
+  const [etabs, setEtabs] = useState([])
+
   const load = () => { setLoading(true); api.get('/super/rh-users', { params: { search } }).then(({ data }) => setItems(data)).finally(() => setLoading(false)) }
   useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t) }, [search])
+  useEffect(() => {
+    api.get('/super/societes').then(({ data }) => setSocietes(Array.isArray(data) ? data : [])).catch(() => {})
+    api.get('/super/etablissements').then(({ data }) => setEtabs(Array.isArray(data) ? data : [])).catch(() => {})
+  }, [])
+
+  const etabName = (code) => etabs.find((e) => String(e.code) === String(code))?.name || code
+  const societeName = (code) => societes.find((s) => String(s.code) === String(code))?.name || code
+  // Établissements proposés : uniquement ceux de la société choisie.
+  const etabsOfSociete = etabs.filter((e) => form.code_societe && String(e.code_societe) === String(form.code_societe))
 
   const openCreate = () => { setForm(empty); setEditing(null); setError(''); setModal(true) }
-  const openEdit = (u) => { setForm({ ...empty, ...u, password: '', role: currentRole(u) }); setEditing(u.id); setError(''); setModal(true) }
+  const openEdit = (u) => {
+    // Société déduite des établissements affectés si absente de societe_utilisateur.
+    const soc = u.code_societe || etabs.find((e) => (u.etablissements || []).includes(e.code))?.code_societe || ''
+    setForm({ ...empty, ...u, password: '', role: currentRole(u), code_societe: soc, etablissements: u.etablissements || [] })
+    setEditing(u.id); setError(''); setModal(true)
+  }
+
+  const changeSociete = (code) => setForm({ ...form, code_societe: code, etablissements: [] })
+  const toggleEtab = (code) => setForm((f) => ({
+    ...f,
+    etablissements: f.etablissements.includes(code) ? f.etablissements.filter((c) => c !== code) : [...f.etablissements, code],
+  }))
 
   const save = async (e) => {
     e.preventDefault(); setError('')
+    const isSuper = form.role === 'super_admin'
+    if (!isSuper && form.code_societe && form.etablissements.length === 0) {
+      setError('Sélectionnez au moins un établissement de la société.'); return
+    }
     try {
-      const payload = { ...form, ...roleToFlags(form.role), role: form.role }
+      const { code_societe, etablissements, ...rest } = form
+      const payload = { ...rest, ...roleToFlags(form.role), role: form.role, ...(isSuper ? {} : { code_societe: code_societe || null, etablissements }) }
       if (editing) await api.put(`/super/rh-users/${editing}`, payload)
       else await api.post('/super/rh-users', payload)
       setModal(false); load()
-    } catch (err) { setError(err.response?.data?.message || 'Erreur.') }
+    } catch (err) {
+      const errs = err.response?.data?.errors
+      setError(errs ? Object.values(errs).flat().join(' ') : (err.response?.data?.message || 'Erreur.'))
+    }
   }
   const remove = async (u) => { if (!confirm(`Désactiver ${u.login} ?`)) return; await api.delete(`/super/rh-users/${u.id}`); load() }
   const reset = async (u) => {
@@ -100,7 +132,7 @@ export default function Users() {
       <Card className="overflow-hidden">
         {loading ? <EmptyState message="Chargement…" /> : items.length === 0 ? <EmptyState /> : (
           <table className="w-full text-sm">
-            <thead className="text-left"><tr><th className="px-4 py-3">Nom</th><th>Login</th><th>Email</th><th>Rôle</th><th>Statut</th><th></th></tr></thead>
+            <thead className="text-left"><tr><th className="px-4 py-3">Nom</th><th>Login</th><th>Email</th><th>Rôle</th><th>Société / Établissements</th><th>Statut</th><th></th></tr></thead>
             <tbody>
               {items.map((u) => (
                 <tr key={u.id} className="border-t">
@@ -108,6 +140,16 @@ export default function Users() {
                   <td className="font-mono text-xs">{u.login}</td>
                   <td className="text-muted">{u.email || '—'}</td>
                   <td>{roleOf(u)}</td>
+                  <td className="text-xs py-2">
+                    {currentRole(u) === 'super_admin' ? <span className="text-muted">Toutes (plateforme)</span> : (
+                      <>
+                        <div className="font-medium">{u.code_societe ? societeName(u.code_societe) : '—'}</div>
+                        {(u.etablissements || []).length > 0
+                          ? <div className="text-muted">{u.etablissements.map(etabName).join(', ')}</div>
+                          : <div className="text-muted italic">Aucun établissement</div>}
+                      </>
+                    )}
+                  </td>
                   <td>{u.supprime ? <Badge value="inactif" /> : <Badge value="actif" />}</td>
                   <td className="text-right px-4 space-x-3 whitespace-nowrap">
                     <button onClick={() => openEdit(u)} className="hover:underline" style={{ color: 'var(--teal)' }}>Modifier</button>
@@ -139,6 +181,36 @@ export default function Users() {
             {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
           </Select>
           <p className="text-xs text-muted -mt-2">Caissier : encaissements uniquement · Comptable : + dépenses & rapports · Directeur : accès complet établissement · Super Admin : console plateforme.</p>
+
+          {form.role !== 'super_admin' && (
+            <div className="space-y-3 pt-1">
+              <div className="text-xs font-semibold text-ink uppercase">Affectation</div>
+              <Select label="Société" value={form.code_societe} onChange={(e) => changeSociete(e.target.value)}>
+                <option value="">— Choisir une société —</option>
+                {societes.map((s) => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
+              </Select>
+              {form.code_societe && (
+                <div>
+                  <span className="block text-sm font-bold text-heading mb-1.5">
+                    Établissements <span className="font-normal text-muted">({form.etablissements.length} sélectionné(s))</span>
+                  </span>
+                  {etabsOfSociete.length === 0 ? (
+                    <p className="text-xs text-muted">Aucun établissement rattaché à cette société.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {etabsOfSociete.map((e) => (
+                        <label key={e.code} className="flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer hover:bg-brand-50" style={{ border: '1px solid var(--border)' }}>
+                          <input type="checkbox" checked={form.etablissements.includes(e.code)} onChange={() => toggleEtab(e.code)} />
+                          <span className="text-sm">{e.name} <span className="font-mono text-xs text-muted">({e.code})</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted mt-1.5">Un utilisateur peut être affecté à un ou plusieurs établissements d'une même société.</p>
+                </div>
+              )}
+            </div>
+          )}
           {error && <div className="text-sm text-red-600">{error}</div>}
           <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button><Button type="submit">Enregistrer</Button></div>
         </form>

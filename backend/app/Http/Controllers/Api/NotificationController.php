@@ -29,7 +29,7 @@ class NotificationController extends Controller
         $versement->load('eleve');
         $n = $versement->toNormalized();
         $ctx = [
-            'recu' => $n['receipt_number'] ?? $versement->NUM,
+            'recu' => $n['receipt_number'] ?? $versement->getKey(),
             'montant' => $n['amount'] ?? 0,
             'devise' => 'XOF',
             'eleve' => $versement->eleve?->full_name ?? '',

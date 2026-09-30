@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\SocieteContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -11,6 +13,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class AcademicYear extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_ANNEEACADEMIQUE';
     protected $primaryKey = 'CodeAnnee';

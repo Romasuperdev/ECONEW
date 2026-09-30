@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\AnneeContext;
 use App\Support\SocieteContext;
 use App\Support\SchemaCache;
@@ -14,9 +16,11 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Versement extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_VERSEMENT';
-    protected $primaryKey = 'NUM';
+    protected $primaryKey = 'Num'; // colonne réelle : Num (les attributs PHP sont sensibles à la casse)
     public $timestamps = false;
 
     public function eleve()
@@ -40,13 +44,14 @@ class Versement extends Model
         $annee = AnneeContext::current();
         $societe = SocieteContext::current();
         $etab = \App\Support\EtablissementContext::current();
-        $cAnnee = static::col(['AnneeAcad', 'ANNEE', 'Annee', 'AnneeScolaire']);
+        $cAnnee = static::col(['AnneAcad', 'AnneeAcad', 'ANNEE', 'Annee', 'AnneeScolaire']);
         $cSoc = static::col(['CODESOCIETE', 'CodeSociete']);
         $cEtab = static::col(['CODEETABLISSEMENT', 'CodeEtablissement']);
-        return $q->when($annee && $cAnnee, fn ($x) => $x->where($cAnnee, $annee))
+        // Année : les anciens versements n'ont pas d'année renseignée (NULL) → conservés.
+        return $q->when($annee && $cAnnee, fn ($x) => $x->where(fn ($w) => $w->where($cAnnee, $annee)->orWhereNull($cAnnee)))
                  ->when($societe && $cSoc, fn ($x) => $x->where($cSoc, $societe))
-                 // Isolation établissement tolérante (laisse passer les lignes non rattachées).
-                 ->when($etab && $cEtab, fn ($x) => $x->where(fn ($w) => $w->where($cEtab, $etab)->orWhereNull($cEtab)));
+                 // Isolation établissement STRICTE (plus de tolérance orWhereNull).
+                 ->when($etab && $cEtab, fn ($x) => $x->where($cEtab, $etab));
     }
 
     // Recupere la premiere colonne existante parmi une liste (tolerance aux noms legacy)
@@ -63,7 +68,7 @@ class Versement extends Model
     public function toNormalized(): array
     {
         return [
-            'id' => $this->NUM,
+            'id' => $this->pick(['Num', 'NUM']),
             'receipt_number' => $this->pick(['NUM_RECU', 'NUMRECU', 'NUMERO_RECU', 'NumeroRecu']),
             'matricule' => $this->pick(['Matricule', 'MATRICULE', 'CodeEleve', 'CODEELEVE']),
             'student' => $this->eleve ? [
@@ -75,6 +80,7 @@ class Versement extends Model
             'method' => $this->pick(['ModePaiement', 'TypeVers', 'TypeVersent', 'ModeReglement']),
             'libelle' => $this->pick(['Libelle', 'LIBELLE', 'Motif']),
             'caisse' => $this->pick(['CODECAISSE', 'CodeCaisse']),
+            'caissier' => $this->pick(['LOGIN', 'Login']),
             'numero_pc' => $this->pick(['NumeroPC', 'NUMEROPC']),
         ];
     }

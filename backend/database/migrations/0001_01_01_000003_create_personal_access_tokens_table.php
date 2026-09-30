@@ -8,7 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('personal_access_tokens', function (Blueprint $table) {
+        // Les jetons Sanctum sont lus/écrits sur la connexion 'master' (dbmasterbacou),
+        // là où se trouve RH_USER — sinon Sanctum écrit et relit sur deux bases
+        // différentes (App\Models\PersonalAccessToken force $connection = 'master').
+        Schema::connection('master')->create('personal_access_tokens', function (Blueprint $table) {
             $table->id();
             $table->morphs('tokenable');
             $table->string('name');
@@ -22,6 +25,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('personal_access_tokens');
+        Schema::connection('master')->dropIfExists('personal_access_tokens');
     }
 };

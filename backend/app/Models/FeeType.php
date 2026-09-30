@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\SchemaCache;
 
 use App\Support\AnneeContext;
@@ -16,6 +18,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class FeeType extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_CATEGORIEPAIEMENT';
     protected $primaryKey = 'Num';
@@ -35,13 +39,32 @@ class FeeType extends Model
         return in_array($c, static::columns(), true);
     }
 
+    /** Première colonne existante parmi des candidats (tolérance noms legacy). */
+    public static function col(array $cands): ?string
+    {
+        foreach ($cands as $c) {
+            if (static::hasCol($c)) {
+                return $c;
+            }
+        }
+        return null;
+    }
+
     public function scopeForTenant(Builder $q): Builder
     {
         $annee = AnneeContext::current();
+        $societe = \App\Support\SocieteContext::current();
+        $etab = \App\Support\EtablissementContext::current();
+        $cSoc = static::col(['CODESOCIETE', 'CodeSociete']);
+        $cEtab = static::col(['CODEETABLISSEMENT', 'CodeEtablissement']);
+
+        // Isolation STRICTE par année (plus de tolérance orWhereNull).
         if ($annee && static::hasCol('ANNEE')) {
-            $q->where(fn ($x) => $x->where('ANNEE', $annee)->orWhereNull('ANNEE'));
+            $q->where('ANNEE', $annee);
         }
-        return $q;
+        return $q
+            ->when($societe && $cSoc, fn ($x) => $x->where($cSoc, $societe))
+            ->when($etab && $cEtab, fn ($x) => $x->where($cEtab, $etab));
     }
 
     protected function pick(array $keys)

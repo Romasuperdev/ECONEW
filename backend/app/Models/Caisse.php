@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\SchemaCache;
 
 use App\Support\AnneeContext;
@@ -16,6 +18,8 @@ use Illuminate\Support\Facades\Schema;
  */
 class Caisse extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_CAISSES';
     protected $primaryKey = 'CODECAISSE';
