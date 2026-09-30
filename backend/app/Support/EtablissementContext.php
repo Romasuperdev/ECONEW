@@ -42,11 +42,10 @@ class EtablissementContext
         $header = request()?->header('X-Etablissement');
         $allowed = static::allowedCodes();
 
-        if ($header !== null && $header !== '') {
-            if (empty($allowed) || in_array((string) $header, $allowed, true)) {
-                return (string) $header;
-            }
-            return $allowed[0];
+        // En-tete accepte UNIQUEMENT s'il appartient au perimetre (anti-usurpation).
+        // Plus de tolerance "accepter un en-tete arbitraire quand la liste est vide".
+        if ($header !== null && $header !== '' && in_array((string) $header, $allowed, true)) {
+            return (string) $header;
         }
 
         if (! empty($allowed)) {

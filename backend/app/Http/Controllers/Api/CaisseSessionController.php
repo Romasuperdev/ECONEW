@@ -127,7 +127,18 @@ class CaisseSessionController extends Controller
         $row = $caisse ? $this->openRowByCaisse($caisse) : $this->openRowByUser($this->loginUserId($request));
         $affectee = $this->userCaisseFor($this->loginUserId($request));
 
+        // Pas de session à mon nom : la caisse qui m'est affectée est-elle tenue par quelqu'un d'autre ?
+        $occupee = null;
+        if (! $row && ! $caisse && $affectee && ($busy = $this->openRowByCaisse($affectee))) {
+            $occupee = [
+                'caisse_code' => $busy->CODECAISSE,
+                'user' => $this->userName($busy->USER_ID) ?? "utilisateur #{$busy->USER_ID}",
+                'date_ouverture' => $busy->DATE_OUVERTURE,
+            ];
+        }
+
         return response()->json([
+            'occupee' => $occupee,
             'user' => $row ? $this->userName($row->USER_ID) : $request->user()?->name,
             'caisse_code' => $row->CODECAISSE ?? $affectee,
             'open' => (bool) $row,
@@ -158,8 +169,15 @@ class CaisseSessionController extends Controller
         if (! $caisse) {
             return response()->json(['message' => "Aucune caisse sélectionnée / affectée. Choisissez une caisse ou voir Configuration → Affectation Caisse."], 422);
         }
-        if ($this->openRowByCaisse($caisse)) {
-            return response()->json(['message' => 'Cette caisse est déjà ouverte.'], 422);
+        if ($busy = $this->openRowByCaisse($caisse)) {
+            $par = $this->userName($busy->USER_ID) ?? "l'utilisateur #{$busy->USER_ID}";
+            $depuis = $busy->DATE_OUVERTURE ? ' depuis le '.date('d/m/Y à H:i', strtotime($busy->DATE_OUVERTURE)) : '';
+            $moi = (string) $busy->USER_ID === (string) $target->getKey();
+            return response()->json([
+                'message' => $moi
+                    ? "Cette caisse est déjà ouverte à votre nom{$depuis}."
+                    : "Cette caisse est déjà ouverte par {$par}{$depuis}. Elle doit d'abord être fermée (Paiement › Fermeture de caisse, avec le mot de passe de {$par}).",
+            ], 422);
         }
         if ($this->openRowByUser($target->getKey())) {
             return response()->json(['message' => 'Ce caissier a déjà une caisse ouverte.'], 422);

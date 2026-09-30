@@ -69,9 +69,11 @@ use App\Http\Controllers\MailDiffusionController;
 // Authentification (limitation de débit anti-force brute)
 Route::middleware('throttle:10,1')->group(function () {
     Route::post('/login', [AuthController::class, 'login']);
-    Route::post('/lookup', [AuthController::class, 'lookup']);
     Route::post('/login/verify-otp', [AuthController::class, 'verifyOtp']);
 });
+// Orientation à la saisie de l'identifiant (écran de connexion) : quota séparé
+// pour ne pas consommer les tentatives de connexion.
+Route::post('/lookup', [AuthController::class, 'lookup'])->middleware('throttle:30,1,lookup');
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/me', [AuthController::class, 'me']);

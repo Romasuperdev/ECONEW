@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\RhUser;
 use App\Support\AuditLogger;
+use App\Support\UserEtablissements;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -112,22 +114,15 @@ class EtablissementAffectationController extends Controller
         if (! $this->ensureUEtab()) {
             return response()->json(['message' => 'Table indisponible.'], 422);
         }
+        $codes = UserEtablissements::codesFor($data['user_id']);
+        if (in_array((string) $data['code_etablissement'], $codes, true)) {
+            return response()->json(['message' => 'Affectation déjà existante.']);
+        }
         try {
-            // société de l'établissement
-            $socEtab = DB::connection('economat')->table('T_ETABLISSEMENT')
-                ->where('CODE', $data['code_etablissement'])->value('CODESOCIETE');
-            $exists = DB::connection('economat')->table(self::UETAB)
-                ->where('USER_ID', $data['user_id'])
-                ->where('CODEETABLISSEMENT', $data['code_etablissement'])->exists();
-            if ($exists) {
-                return response()->json(['message' => 'Affectation déjà existante.']);
-            }
-            DB::connection('economat')->table(self::UETAB)->insert([
-                'USER_ID' => $data['user_id'],
-                'CODEETABLISSEMENT' => $data['code_etablissement'],
-                'CODESOCIETE' => $socEtab,
-                'CREATED_AT' => now(),
-            ]);
+            // Tous les établissements de l'utilisateur doivent rester dans la même société.
+            UserEtablissements::sync($data['user_id'], null, array_merge($codes, [$data['code_etablissement']]));
+        } catch (ValidationException $e) {
+            throw $e;
         } catch (\Throwable $e) {
             return response()->json(['message' => 'Affectation impossible : '.$e->getMessage()], 422);
         }

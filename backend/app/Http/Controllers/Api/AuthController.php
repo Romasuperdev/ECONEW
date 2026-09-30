@@ -4,10 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\RhUser;
+use App\Models\Societe;
 use App\Support\AuditLogger;
+use App\Support\UserEtablissements;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
@@ -15,11 +18,13 @@ use Illuminate\Validation\ValidationException;
 class AuthController extends Controller
 {
     /**
-     * Recherche publique : Login/Email -> nom + societe(s) si disponibles.
+     * Recherche publique (écran de connexion) : Login/Email -> société de
+     * rattachement + établissement(s) affecté(s), pour orienter l'utilisateur.
+     * Volontairement minimal : ni nom, ni coordonnées.
      */
     public function lookup(Request $request)
     {
-        $data = $request->validate(['identifier' => ['required', 'string']]);
+        $data = $request->validate(['identifier' => ['required', 'string', 'max:150']]);
 
         $user = RhUser::where('Login', $data['identifier'])
             ->orWhere('Email', $data['identifier'])
@@ -29,11 +34,37 @@ class AuthController extends Controller
             return response()->json(['found' => false]);
         }
 
+        if ($user->isSuperAdmin()) {
+            return response()->json(['found' => true, 'is_super_admin' => true, 'societes' => [], 'etablissements' => []]);
+        }
+
+        // Établissements affectés (ECO_USER_ETAB) et leur société (T_ETABLISSEMENT.CODESOCIETE).
+        $etabs = collect();
+        $codes = UserEtablissements::codesFor($user->Id);
+        if (! empty($codes)) {
+            try {
+                $etabs = DB::connection('economat')->table('T_ETABLISSEMENT')
+                    ->whereIn('CODE', $codes)->orderBy('RAISONSOCIALE')
+                    ->get(['CODE', 'RAISONSOCIALE', 'CODESOCIETE']);
+            } catch (\Throwable $e) {
+            }
+        }
+
+        // Société : celle des établissements affectés, sinon celle(s) du compte.
+        $socCodes = $etabs->pluck('CODESOCIETE')->filter()->unique()->values()->all();
+        try {
+            $societes = ! empty($socCodes)
+                ? Societe::whereIn('CODESOCIETE', $socCodes)->get()
+                : $user->societesResolved();
+        } catch (\Throwable $e) {
+            $societes = collect();
+        }
+
         return response()->json([
             'found' => true,
-            'name' => $user->name,
-            'is_super_admin' => $user->isSuperAdmin(),
-            'societes' => $user->societesResolved()->map->toNormalized()->values(),
+            'is_super_admin' => false,
+            'societes' => $societes->map(fn ($s) => ['code' => $s->CODESOCIETE, 'name' => $s->NOMSOCIETE])->values(),
+            'etablissements' => $etabs->map(fn ($e) => ['code' => $e->CODE, 'name' => $e->RAISONSOCIALE ?: $e->CODE])->values(),
         ]);
     }
 

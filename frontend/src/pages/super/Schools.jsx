@@ -2,19 +2,18 @@ import { useEffect, useState } from 'react'
 import api from '../../api/client'
 import { Card, Button, Input, Select, Modal, Badge, EmptyState } from '../../components/ui'
 import PageHeader from '../../components/PageHeader'
-import { formatDate } from '../../utils/format'
 
+// Établissements = ECONOMAT.dbo.T_ETABLISSEMENT (identifiant : CODE).
 const empty = {
-  name: '', sigle: '', responsable_name: '', address: '', city: '', country: '',
-  phone: '', email: '', website: '', timezone: 'Africa/Abidjan', rccm: '', tax_number: '',
-  currency: 'XOF', language: 'fr',
-  admin_name: '', admin_email: '', admin_password: '',
-  subscription_plan_id: '', trial_days: 30,
+  code: '', name: '', type: '', code_societe: '',
+  address: '', phone: '', fax: '', email: '', website: '',
+  city: '', circonscription: '',
+  nom_resp: '', prenom_resp: '', contact_resp: '', email_directeur: '',
 }
 
 export default function Schools() {
   const [items, setItems] = useState([])
-  const [plans, setPlans] = useState([])
+  const [societes, setSocietes] = useState([])
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
@@ -22,95 +21,99 @@ export default function Schools() {
   const [form, setForm] = useState(empty)
   const [editing, setEditing] = useState(null)
   const [error, setError] = useState('')
-  const [created, setCreated] = useState(null)
+  const [detail, setDetail] = useState(null) // fiche complète T_ETABLISSEMENT
 
   const load = () => {
     setLoading(true)
-    api.get('/super/schools', { params: { search, status, per_page: 100 } })
+    api.get('/super/schools', { params: { search, status } })
       .then(({ data }) => setItems(data.data || data)).finally(() => setLoading(false))
   }
 
-  useEffect(() => { api.get('/super/plans').then(({ data }) => setPlans(data)) }, [])
+  useEffect(() => { api.get('/super/societes').then(({ data }) => setSocietes(data)).catch(() => {}) }, [])
   useEffect(() => { const t = setTimeout(load, 300); return () => clearTimeout(t) }, [search, status])
 
-  const openCreate = () => { setForm(empty); setEditing(null); setError(''); setCreated(null); setModal(true) }
+  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value })
+  const societeName = (code) => societes.find((s) => String(s.code) === String(code))?.name
+
+  const openCreate = () => { setForm(empty); setEditing(null); setError(''); setModal(true) }
   const openEdit = (s) => {
-    setForm({
-      ...empty,
-      name: s.name || '', sigle: s.sigle || '', responsable_name: s.responsable_name || '',
-      address: s.address || '', city: s.city || '', country: s.country || '',
-      phone: s.phone || '', email: s.email || '', website: s.website || '',
-      timezone: s.timezone || 'Africa/Abidjan', rccm: s.rccm || '', tax_number: s.tax_number || '',
-      currency: s.currency || 'XOF', language: s.language || 'fr',
-    })
-    setEditing(s.id); setError(''); setCreated(null); setModal(true)
+    const f = { ...empty }
+    Object.keys(empty).forEach((k) => { f[k] = s[k] ?? '' })
+    setForm(f); setEditing(s.id); setError(''); setModal(true)
   }
 
   const save = async (e) => {
     e.preventDefault(); setError('')
     try {
       if (editing) {
-        await api.put(`/super/schools/${editing}`, {
-          name: form.name, sigle: form.sigle, responsable_name: form.responsable_name,
-          address: form.address, city: form.city, country: form.country,
-          language: form.language, phone: form.phone, email: form.email, website: form.website,
-          timezone: form.timezone, rccm: form.rccm, tax_number: form.tax_number, currency: form.currency,
-        })
-        setModal(false); load()
-        return
+        const { code, ...payload } = form
+        await api.put(`/super/schools/${encodeURIComponent(editing)}`, payload)
+      } else {
+        await api.post('/super/schools', form)
       }
-      const { data } = await api.post('/super/schools', {
-        ...form,
-        subscription_plan_id: form.subscription_plan_id || null,
-        trial_days: Number(form.trial_days) || 0,
-      })
-      setCreated(data); load()
-    } catch (err) { setError(err.response?.data?.message || 'Erreur.') }
+      setModal(false); load()
+    } catch (err) {
+      const errs = err.response?.data?.errors
+      setError(errs ? Object.values(errs).flat().join(' ') : (err.response?.data?.message || 'Erreur.'))
+    }
   }
 
   const changeStatus = async (school, newStatus) => {
-    await api.patch(`/super/schools/${school.id}/status`, { status: newStatus })
+    await api.patch(`/super/schools/${encodeURIComponent(school.id)}/status`, { status: newStatus })
     load()
   }
 
   const remove = async (school) => {
-    if (!confirm(`Supprimer définitivement ${school.name} et toutes ses données ?`)) return
-    await api.delete(`/super/schools/${school.id}`); load()
+    if (!confirm(`Supprimer l'établissement ${school.name} (${school.code}) ?`)) return
+    try { await api.delete(`/super/schools/${encodeURIComponent(school.id)}`); load() }
+    catch (err) { alert(err.response?.data?.message || 'Suppression impossible.') }
   }
 
   return (
     <>
-      <PageHeader title="Établissements" subtitle={`${items.length} école(s)`}
+      <PageHeader title="Établissements" subtitle={`${items.length} établissement(s)`}
         action={<Button onClick={openCreate}>+ Nouvel établissement</Button>} />
 
       <Card className="p-4 mb-4 flex gap-3">
-        <Input placeholder="Rechercher…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1" />
+        <Input placeholder="Rechercher par nom ou code…" value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1" />
         <Select value={status} onChange={(e) => setStatus(e.target.value)} className="max-w-xs">
           <option value="">Tous les statuts</option>
-          <option value="active">Actives</option>
-          <option value="suspended">Suspendues</option>
-          <option value="inactive">Inactives</option>
+          <option value="active">Actifs</option>
+          <option value="suspended">Suspendus</option>
+          <option value="inactive">Inactifs</option>
         </Select>
       </Card>
 
       <Card className="overflow-hidden">
         {loading ? <EmptyState message="Chargement…" /> : items.length === 0 ? <EmptyState /> : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-brand-50 text-left text-ink">
-              <tr><th className="px-4 py-3">Établissement</th><th>Code</th><th>Formule</th><th>Élèves</th><th>Statut</th><th></th></tr>
+              <tr>
+                <th className="px-4 py-3">Établissement</th><th>Code</th><th>Type</th>
+                <th>Téléphone</th><th>Email</th><th>Élèves</th>
+                <th>Sous-préfecture</th><th>Société</th><th>Statut</th><th></th>
+              </tr>
             </thead>
             <tbody>
               {items.map((s) => (
                 <tr key={s.id} className="border-t hover:bg-brand-50">
                   <td className="px-4 py-3">
                     <div className="font-medium">{s.name}</div>
-                    <div className="text-ink text-xs">{s.country || '—'} · {s.responsable_name || '—'}</div>
+                    <div className="text-ink text-xs">{s.responsable_name || '—'}</div>
                   </td>
                   <td className="font-mono text-xs">{s.code}</td>
-                  <td>{s.current_subscription?.plan?.name || '—'}</td>
+                  <td>{s.type || '—'}</td>
+                  <td className="whitespace-nowrap">{s.phone || '—'}</td>
+                  <td className="text-xs">{s.email || '—'}</td>
                   <td>{s.students_count ?? 0}</td>
+                  <td>{s.city || '—'}</td>
+                  <td className="text-xs" title={societeName(s.code_societe) || ''}>
+                    <span className="font-mono">{s.code_societe || '—'}</span>
+                  </td>
                   <td><Badge value={s.status === 'active' ? 'actif' : s.status} /></td>
                   <td className="text-right px-4 space-x-2 whitespace-nowrap">
+                    <button onClick={() => setDetail(s)} className="hover:underline" style={{ color: 'var(--teal)' }}>Détails</button>
                     {s.status === 'active'
                       ? <button onClick={() => changeStatus(s, 'suspended')} className="text-amber-600 hover:underline">Suspendre</button>
                       : <button onClick={() => changeStatus(s, 'active')} className="text-turquoise-600 hover:underline">Activer</button>}
@@ -121,72 +124,118 @@ export default function Schools() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </Card>
 
       <Modal open={modal} onClose={() => setModal(false)} title={editing ? 'Modifier l\'établissement' : 'Nouvel établissement'}>
-        {created ? (
-          <div className="space-y-3 text-sm">
-            <div className="p-3 bg-turquoise-500/10 text-turquoise-600 rounded">
-              ✅ Établissement <strong>{created.name}</strong> créé avec succès.
-            </div>
-            <p>Compte administrateur : <strong>{form.admin_email}</strong></p>
-            <p className="text-ink">Communiquez ses identifiants au responsable de l'école.</p>
-            <div className="flex justify-end"><Button onClick={() => setModal(false)}>Fermer</Button></div>
+        <form onSubmit={save} className="space-y-4">
+          <div className="text-xs font-semibold text-ink uppercase">Identité</div>
+          <div className="grid grid-cols-3 gap-3">
+            <Input label="Code" value={form.code} onChange={set('code')} maxLength={10} required disabled={!!editing} />
+            <div className="col-span-2"><Input label="Raison sociale" value={form.name} onChange={set('name')} required /></div>
           </div>
-        ) : (
-          <form onSubmit={save} className="space-y-4">
-            <div className="text-xs font-semibold text-ink uppercase">Établissement</div>
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-2"><Input label="Nom" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required /></div>
-              <Input label="Sigle" value={form.sigle} onChange={(e) => setForm({ ...form, sigle: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Responsable" value={form.responsable_name} onChange={(e) => setForm({ ...form, responsable_name: e.target.value })} />
-              <Input label="Téléphone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              <Input label="Site internet" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <Input label="Adresse" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-              <Input label="Ville" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-              <Input label="Pays" value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} />
-            </div>
-            <div className="grid grid-cols-3 gap-3">
-              <Input label="Devise" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
-              <Input label="RCCM" value={form.rccm} onChange={(e) => setForm({ ...form, rccm: e.target.value })} />
-              <Input label="N° fiscal" value={form.tax_number} onChange={(e) => setForm({ ...form, tax_number: e.target.value })} />
-            </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Type" value={form.type} onChange={set('type')} placeholder="PRIVE, PUBLIC…" />
+            <Select label="Société" value={form.code_societe} onChange={set('code_societe')}>
+              <option value="">— Aucune —</option>
+              {societes.map((s) => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
+            </Select>
+          </div>
 
-            {!editing && (
-              <>
-                <div className="text-xs font-semibold text-ink uppercase pt-2">Compte administrateur</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input label="Nom" value={form.admin_name} onChange={(e) => setForm({ ...form, admin_name: e.target.value })} required />
-                  <Input label="Email" type="email" value={form.admin_email} onChange={(e) => setForm({ ...form, admin_email: e.target.value })} required />
+          <div className="text-xs font-semibold text-ink uppercase pt-2">Coordonnées</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Adresse" value={form.address} onChange={set('address')} />
+            <Input label="Téléphone" value={form.phone} onChange={set('phone')} />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <Input label="Fax" value={form.fax} onChange={set('fax')} />
+            <Input label="Email" type="email" value={form.email} onChange={set('email')} />
+            <Input label="Site web" value={form.website} onChange={set('website')} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Sous-préfecture" value={form.city} onChange={set('city')} />
+            <Input label="Circonscription" value={form.circonscription} onChange={set('circonscription')} />
+          </div>
+
+          <div className="text-xs font-semibold text-ink uppercase pt-2">Responsable</div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Nom" value={form.nom_resp} onChange={set('nom_resp')} />
+            <Input label="Prénom" value={form.prenom_resp} onChange={set('prenom_resp')} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Contact" value={form.contact_resp} onChange={set('contact_resp')} />
+            <Input label="Email directeur" type="email" value={form.email_directeur} onChange={set('email_directeur')} />
+          </div>
+
+          {error && <div className="text-sm text-red-600">{error}</div>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button>
+            <Button type="submit">{editing ? 'Enregistrer' : 'Créer l\'établissement'}</Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={`Fiche établissement — ${detail?.name || ''}`} size="lg">
+        {detail?.details && (() => {
+          const d = detail.details
+          const groups = [
+            ['Identité', [
+              ['Code', d.code], ['Raison sociale', d.raison_sociale], ['Type', d.type],
+              ['Statut', d.statut], ['Nombre d\'élèves', d.nbre_eleves], ['Code société', d.code_societe],
+            ]],
+            ['Coordonnées', [
+              ['Adresse', d.adresse], ['Téléphone', d.telephone], ['Fax', d.fax],
+              ['Email', d.email], ['Site web', d.site_web],
+              ['Sous-préfecture', d.sous_prefecture], ['Circonscription', d.circonscription],
+            ]],
+            ['Responsable', [
+              ['Nom', d.nom_resp], ['Prénom', d.prenom_resp], ['Sexe', d.sexe],
+              ['Contact', d.contact_resp], ['Adresse', d.adresse_resp],
+              ['Occupation', d.occupation_resp], ['Email directeur', d.email_directeur],
+            ]],
+            ['Administration (DREN / IEP)', [
+              ['Code IEP', d.code_iep], ['Intitulé IEP', d.intitule_iep],
+              ['Code DREN', d.code_dren], ['Intitulé DREN', d.intitule_dren],
+              ['Direction dép.', d.direction_dep], ['Nom source', d.nom_source],
+            ]],
+            ['Comptabilité & caisse', [
+              ['ID compta', d.id_compta], ['Type base', d.type_base],
+              ['Base SAGE', d.nom_base_sage], ['Base BACOU', d.nom_base_bacou],
+              ['Compte tréso', d.compte_treso], ['Code journal', d.code_jrnal],
+              ['Compte tiers', d.compte_tiers], ['N° compte', d.num_compte],
+              ['Compte scolarité', d.compte_sco], ['Compte TP', d.compte_tp],
+              ['Compte cantine', d.compte_cant], ['Compte pension', d.compte_pens],
+              ['Liaison caisse', d.liaison_caisse], ['Base caisse', d.base_caisse],
+              ['Nom caisse', d.nom_caisse], ['Regroupement rub.', d.rub_regroup],
+              ['Bool PDT', d.bool_pdt],
+            ]],
+            ['Montants & niveaux', [
+              ['Montant 1er cycle', d.mt_1cycle], ['Montant 2e cycle', d.mt_2cycle],
+              ['NIV1', d.niv1], ['NIV2', d.niv2], ['NIV3', d.niv3], ['NIV4', d.niv4],
+              ['NIV5', d.niv5], ['NIV6', d.niv6], ['NIV7', d.niv7],
+            ]],
+          ]
+          const val = (v) => (v === null || v === undefined || v === '') ? '—' : String(v)
+          return (
+            <div className="space-y-5">
+              {groups.map(([title, rows]) => (
+                <div key={title}>
+                  <div className="text-xs font-semibold uppercase text-ink mb-2" style={{ color: 'var(--teal)' }}>{title}</div>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1.5">
+                    {rows.map(([label, v]) => (
+                      <div key={label} className="flex justify-between gap-3 border-b border-dashed py-1" style={{ borderColor: 'var(--border)' }}>
+                        <span className="text-muted text-xs">{label}</span>
+                        <span className="text-sm font-medium text-right break-all">{val(v)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <Input label="Mot de passe" type="password" value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} required />
-
-                <div className="text-xs font-semibold text-ink uppercase pt-2">Abonnement initial</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Select label="Formule" value={form.subscription_plan_id} onChange={(e) => setForm({ ...form, subscription_plan_id: e.target.value })}>
-                    <option value="">— Aucune —</option>
-                    {plans.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </Select>
-                  <Input label="Durée (jours)" type="number" value={form.trial_days} onChange={(e) => setForm({ ...form, trial_days: e.target.value })} />
-                </div>
-              </>
-            )}
-
-            {error && <div className="text-sm text-red-600">{error}</div>}
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setModal(false)}>Annuler</Button>
-              <Button type="submit">{editing ? 'Enregistrer' : 'Créer l\'établissement'}</Button>
+              ))}
+              <div className="flex justify-end"><Button onClick={() => setDetail(null)}>Fermer</Button></div>
             </div>
-          </form>
-        )}
+          )
+        })()}
       </Modal>
     </>
   )

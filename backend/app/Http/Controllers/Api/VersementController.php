@@ -19,14 +19,27 @@ class VersementController extends Controller
 {
     public function index(Request $request)
     {
+        $cDate = Versement::col(['DateVers', 'DateVersement', 'DATEVERS', 'DateRecu']) ?? 'DateVers';
+        $cCaisse = Versement::col(['CODECAISSE', 'CodeCaisse']);
+        $cMode = Versement::col(['ModePaiement', 'TypeVers', 'TypeVersent', 'ModeReglement']);
+        $cLib = Versement::col(['Libelle', 'LIBELLE', 'Motif']);
+
         $q = Versement::forTenant()->with('eleve')
             ->when($request->matricule, fn ($x, $m) => $x->where('Matricule', $m))
             ->when($request->search, fn ($x, $s) => $x->where(fn ($w) => $w
                 ->where('Matricule', 'like', "%$s%")
-                ->orWhere('NUM_RECU', 'like', "%$s%")))
-            ->orderByDesc('NUM');
+                ->orWhere('NUM_RECU', 'like', "%$s%")
+                // Recherche par nom / prénom de l'élève
+                ->orWhereHas('eleve', fn ($e) => $e->where(fn ($n) => $n
+                    ->where('Nom', 'like', "%$s%")->orWhere('Prenom', 'like', "%$s%")))))
+            ->when($request->date_from, fn ($x, $d) => $x->whereDate($cDate, '>=', $d))
+            ->when($request->date_to, fn ($x, $d) => $x->whereDate($cDate, '<=', $d))
+            ->when($request->caisse && $cCaisse, fn ($x) => $x->where($cCaisse, $request->caisse))
+            ->when($request->mode && $cMode, fn ($x) => $x->where($cMode, $request->mode))
+            ->when($request->libelle && $cLib, fn ($x) => $x->where($cLib, $request->libelle))
+            ->orderByDesc($cDate)->orderByDesc('Num');
 
-        $page = $q->paginate((int) ($request->per_page ?? 30));
+        $page = $q->paginate(min((int) ($request->per_page ?? 30), 2000));
         $page->getCollection()->transform(fn ($v) => $v->toNormalized());
 
         return $page;
@@ -47,6 +60,8 @@ class VersementController extends Controller
             'date' => ['nullable', 'date'],
             'libelle' => ['nullable', 'string'],
             'caisse' => ['nullable', 'string'],
+            // N° de reçu à réutiliser : un paiement multi-rubriques = un seul reçu.
+            'num_recu' => ['nullable', 'string', 'max:50'],
         ]);
 
         // Aucun paiement possible si la caisse de l'utilisateur n'est pas ouverte.
@@ -100,25 +115,29 @@ class VersementController extends Controller
             }
         }
 
-        return DB::connection('economat')->transaction(function () use ($data, $eleve, $has, $set, $caisseCode) {
+        $login = $request->user()?->Login ?? $request->user()?->name;
+
+        return DB::connection('economat')->transaction(function () use ($data, $eleve, $has, $set, $caisseCode, $login) {
             $v = new Versement();
             $set($v, ['Matricule', 'MATRICULE', 'CodeEleve', 'CODEELEVE'], $data['matricule']);
             $set($v, ['Montant', 'MONTANT', 'MONTANT_CFA', 'MontantVerse'], $data['montant']);
-            $set($v, ['DateVers', 'DateVersement', 'DATEVERS', 'DateRecu'], $data['date'] ?? now()->toDateString());
+            // Date + heure du paiement (colonne datetime) pour l'historique.
+            $set($v, ['DateVers', 'DateVersement', 'DATEVERS', 'DateRecu'], $data['date'] ?? now()->format('Y-m-d H:i:s'));
             $set($v, ['ModePaiement', 'TypeVers', 'TypeVersent', 'ModeReglement'], $data['mode'] ?? 'Espèces');
             $set($v, ['Libelle', 'LIBELLE', 'Motif'], $data['libelle'] ?? 'Versement scolarité');
             $set($v, ['CODECAISSE', 'CodeCaisse'], $caisseCode);
-            $set($v, ['AnneeAcad', 'ANNEE'], AnneeContext::current());
+            $set($v, ['AnneAcad', 'AnneeAcad', 'ANNEE'], AnneeContext::current());
             $set($v, ['CODESOCIETE'], SocieteContext::current());
             $set($v, ['CODEETABLISSEMENT', 'CodeEtablissement'], EtablissementContext::current());
+            $set($v, ['LOGIN', 'Login'], $login); // caissier ayant encaissé
 
-            // Numéro de reçu (séquence)
+            // Numéro de reçu : réutilisé pour les lignes d'un même paiement, sinon nouveau.
             $recCol = null;
             foreach (['NUM_RECU', 'NUMERO_RECU', 'NUMRECU', 'NumeroRecu'] as $c) {
                 if ($has($c)) { $recCol = $c; break; }
             }
             if ($recCol) {
-                $v->{$recCol} = (int) DB::connection('economat')->table('T_VERSEMENT')->max($recCol) + 1;
+                $v->{$recCol} = ! empty($data['num_recu']) ? $data['num_recu'] : $this->nextReceiptNumber($recCol);
             }
 
             // Insertion : on tente en laissant NUM auto, sinon on génère NUM
@@ -126,7 +145,7 @@ class VersementController extends Controller
                 $v->save();
             } catch (\Throwable $e) {
                 try {
-                    $v->NUM = (int) DB::connection('economat')->table('T_VERSEMENT')->max('NUM') + 1;
+                    $v->Num = (int) DB::connection('economat')->table('T_VERSEMENT')->max('Num') + 1;
                     $v->save();
                 } catch (\Throwable $e2) {
                     return response()->json([
@@ -146,6 +165,25 @@ class VersementController extends Controller
 
             return response()->json($v->load('eleve')->toNormalized(), 201);
         });
+    }
+
+    /**
+     * Prochain n° de reçu au format REC-AAAA-000001 (séquence par année civile).
+     * La colonne est un varchar contenant des formats hérités hétérogènes
+     * ("1", "ROM00002", "REC-000010-9-2025"…) : on ne lit que le format courant.
+     * Verrou (UPDLOCK/HOLDLOCK) pour éviter deux reçus identiques en concurrence.
+     */
+    private function nextReceiptNumber(string $col): string
+    {
+        $prefix = 'REC-'.now()->format('Y').'-';
+        $row = DB::connection('economat')->selectOne(
+            "SELECT MAX(TRY_CAST(SUBSTRING([$col], ?, 20) AS INT)) AS n
+               FROM T_VERSEMENT WITH (UPDLOCK, HOLDLOCK)
+              WHERE [$col] LIKE ?",
+            [strlen($prefix) + 1, $prefix.'%']
+        );
+
+        return $prefix.str_pad((string) (((int) ($row->n ?? 0)) + 1), 6, '0', STR_PAD_LEFT);
     }
 
     public function destroy(Request $request, Versement $versement)

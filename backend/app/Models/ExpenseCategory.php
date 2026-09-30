@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\SocieteContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -12,6 +14,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class ExpenseCategory extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'ECO_CATEGORIE_DEPENSE';
     protected $primaryKey = 'ID';

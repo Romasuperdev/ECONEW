@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
@@ -12,6 +14,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Cycle extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_CYCLE';
     protected $primaryKey = 'Num';
@@ -38,18 +42,11 @@ class Cycle extends Model
      */
     public static function available()
     {
+        // Isolation STRICTE : uniquement le tenant courant, aucun repli global.
         try {
-            $rows = static::forTenant()->withCount('levels')->orderBy('LibelleCycle')->get();
-            if ($rows->isEmpty()) {
-                $rows = static::withCount('levels')->orderBy('LibelleCycle')->get();
-            }
-            return $rows;
+            return static::forTenant()->withCount('levels')->orderBy('LibelleCycle')->get();
         } catch (\Throwable $e) {
-            try {
-                return static::orderBy('LibelleCycle')->get();
-            } catch (\Throwable $e2) {
-                return collect();
-            }
+            return collect();
         }
     }
 

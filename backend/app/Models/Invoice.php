@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\AnneeContext;
 use App\Support\EtablissementContext;
 use App\Support\SocieteContext;
@@ -14,6 +16,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Invoice extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'ECO_FACTURE';
     protected $primaryKey = 'ID';

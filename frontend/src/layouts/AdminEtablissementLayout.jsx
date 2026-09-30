@@ -4,6 +4,8 @@ import { useAuth } from '../context/AuthContext'
 import { LogoMark } from '../components/Logo'
 import Icon from '../components/Icon'
 import ThemeSwitcher from '../components/ThemeSwitcher'
+import CollapseToggle from '../components/CollapseToggle'
+import { useSidebarCollapsed } from '../hooks/useSidebarCollapsed'
 
 // Association module → entrée de navigation.
 const NAV_BY_MODULE = {
@@ -20,6 +22,8 @@ export default function AdminEtablissementLayout() {
   const navigate = useNavigate()
   const location = useLocation()
   const [open, setOpen] = useState(false)
+  const [collapsed, setCollapsed] = useSidebarCollapsed()
+  const mini = collapsed ? 'lg:hidden' : ''
   const handleLogout = async () => { await logout(); navigate('/login', { replace: true }) }
   useEffect(() => { setOpen(false) }, [location.pathname])
 
@@ -30,38 +34,39 @@ export default function AdminEtablissementLayout() {
     <div className="min-h-screen flex">
       {open && <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setOpen(false)} />}
 
-      <aside className={`w-64 flex flex-col fixed h-full z-40 transition-transform duration-200 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
+      <aside className={`w-64 ${collapsed ? 'lg:w-20' : ''} flex flex-col fixed h-full z-40 transition-[transform,width] duration-200 lg:translate-x-0 ${open ? 'translate-x-0' : '-translate-x-full'}`}
         style={{ background: 'var(--sidebar-2)', color: 'var(--sidebar-text)' }}>
-        <div className="px-5 py-5 flex items-center gap-3" style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}>
+        <div className={`px-5 py-5 flex items-center gap-3 ${collapsed ? 'lg:flex-col lg:px-2' : ''}`} style={{ borderBottom: '1px solid rgba(255,255,255,.08)' }}>
           <LogoMark size={38} />
-          <div className="leading-tight">
+          <div className={`leading-tight ${mini}`}>
             <div className="text-base font-extrabold text-white tracking-tight">NEXORA <span className="font-semibold opacity-90">ECONOMAT</span></div>
             <div className="text-[10px] font-semibold" style={{ color: 'var(--accent)' }}>ADMIN ÉTABLISSEMENT</div>
           </div>
           <button onClick={() => setOpen(false)} className="ml-auto lg:hidden text-white/80 text-2xl leading-none" aria-label="Fermer le menu">&times;</button>
+          <CollapseToggle collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+        <nav className={`flex-1 px-3 py-4 space-y-1 overflow-y-auto ${collapsed ? 'lg:px-2' : ''}`}>
           {nav.map((item) => (
-            <NavLink key={item.to} to={item.to}
-              className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${isActive ? 'font-semibold' : 'hover:bg-white/5'}`}
+            <NavLink key={item.to} to={item.to} title={collapsed ? item.label : undefined}
+              className={({ isActive }) => `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition ${collapsed ? 'lg:justify-center lg:px-0' : ''} ${isActive ? 'font-semibold' : 'hover:bg-white/5'}`}
               style={({ isActive }) => isActive ? { background: 'var(--accent)', color: 'var(--accent-ink)' } : { color: 'var(--sidebar-text)' }}>
-              <Icon name={item.icon} size={19} /> {item.label}
+              <Icon name={item.icon} size={19} /> <span className={mini}>{item.label}</span>
             </NavLink>
           ))}
         </nav>
-        <div className="px-4 py-3" style={{ borderTop: '1px solid rgba(255,255,255,.08)' }}>
+        <div className={`px-4 py-3 ${mini}`} style={{ borderTop: '1px solid rgba(255,255,255,.08)' }}>
           <ThemeSwitcher compact />
         </div>
-        <div className="px-4 py-4" style={{ borderTop: '1px solid rgba(255,255,255,.08)' }}>
-          <div className="text-sm font-medium text-white">{user?.name}</div>
-          <div className="text-xs" style={{ color: 'var(--accent)' }}>Admin d'établissement</div>
-          <button onClick={handleLogout} className="mt-3 flex items-center gap-2 text-xs opacity-80 hover:opacity-100">
-            <Icon name="logout" size={15} /> Se déconnecter
+        <div className={`px-4 py-4 ${collapsed ? 'lg:px-2 lg:flex lg:justify-center' : ''}`} style={{ borderTop: '1px solid rgba(255,255,255,.08)' }}>
+          <div className={`text-sm font-medium text-white ${mini}`}>{user?.name}</div>
+          <div className={`text-xs ${mini}`} style={{ color: 'var(--accent)' }}>Admin d'établissement</div>
+          <button onClick={handleLogout} title="Se déconnecter" className={`mt-3 flex items-center gap-2 text-xs opacity-80 hover:opacity-100 ${collapsed ? 'lg:mt-0' : ''}`}>
+            <Icon name="logout" size={15} /> <span className={mini}>Se déconnecter</span>
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 lg:ml-64 min-w-0">
+      <main className={`flex-1 ${collapsed ? 'lg:ml-20' : 'lg:ml-64'} min-w-0 transition-[margin] duration-200`}>
         <div className="sticky top-0 z-20 flex items-center gap-3 px-4 sm:px-6 py-3 lg:hidden"
           style={{ background: 'color-mix(in srgb, var(--bg) 85%, transparent)', backdropFilter: 'blur(8px)', borderBottom: '1px solid var(--border)' }}>
           <button onClick={() => setOpen(true)} className="p-2 rounded-lg" style={{ border: '1px solid var(--border)' }} aria-label="Ouvrir le menu">

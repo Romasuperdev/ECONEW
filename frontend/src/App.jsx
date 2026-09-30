@@ -35,6 +35,7 @@ const ChauffeurCarPage = lazy(() => import('./pages/ChauffeurCarPage'))
 const ReinscriptionTransportPage = lazy(() => import('./pages/ReinscriptionTransportPage'))
 const ChangementDestinationPage = lazy(() => import('./pages/ChangementDestinationPage'))
 const HistoriquePaiementTransportPage = lazy(() => import('./pages/HistoriquePaiementTransportPage'))
+const HistoriquePaiementsPage = lazy(() => import('./pages/HistoriquePaiementsPage'))
 const ElevesParDestinationPage = lazy(() => import('./pages/ElevesParDestinationPage'))
 const ElevesParCarPage = lazy(() => import('./pages/ElevesParCarPage'))
 const InscriptionServicePage = lazy(() => import('./pages/InscriptionServicePage'))
@@ -198,6 +199,7 @@ export default function App() {
             <Route path="fermeture-caisse" element={<FermetureCaissePage />} />
             <Route path="point-caisse" element={<PointCaissePage />} />
             <Route path="point-caisse-detaille" element={<PointCaisseDetaillePage />} />
+            <Route path="historique-paiements" element={<HistoriquePaiementsPage />} />
             <Route path="chiffre-affaire" element={<ChiffreAffairePage />} />
             <Route path="etat-paiements" element={<EtatPaiementsPage />} />
             <Route path="etat-paiements-periodiques" element={<EtatPaiementsPeriodiquesPage />} />

@@ -3,175 +3,198 @@
 namespace App\Http\Controllers\Api\SuperAdmin;
 
 use App\Http\Controllers\Controller;
-use App\Models\School;
-use App\Models\Subscription;
-use App\Models\SubscriptionPlan;
-use App\Models\User;
+use App\Models\Etablissement;
+use App\Models\Student;
 use App\Support\AuditLogger;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
-use Illuminate\Validation\Rules\Password;
+use Illuminate\Validation\Rule;
 
+/**
+ * Console plateforme : établissements = table ECONOMAT.dbo.T_ETABLISSEMENT.
+ * L'identifiant exposé à l'API est la colonne CODE (référencée ailleurs
+ * dans CODEETABLISSEMENT).
+ */
 class SchoolController extends Controller
 {
+    /** Statut API ↔ valeur stockée dans T_ETABLISSEMENT.STATUT. */
+    private const STATUTS = ['active' => 'ACTIF', 'suspended' => 'SUSPENDU', 'inactive' => 'INACTIF'];
+
+    /** Champs du formulaire → colonnes T_ETABLISSEMENT. */
+    private const MAP = [
+        'name' => 'RAISONSOCIALE', 'type' => 'TYPE', 'address' => 'ADRESSE',
+        'phone' => 'TELEPHONE', 'fax' => 'FAX', 'email' => 'EMAIL', 'website' => 'SITEWEB',
+        'nom_resp' => 'NOMRESP', 'prenom_resp' => 'PRENOMRESP', 'contact_resp' => 'CONTACTRESP',
+        'email_directeur' => 'EMAILDIRECTEUR', 'city' => 'SOUS_PREFECTURE',
+        'circonscription' => 'CIRCONSCRIPTION', 'code_societe' => 'CODESOCIETE',
+    ];
+
     public function index(Request $request)
     {
-        $q = School::query()
-            ->with('currentSubscription.plan')
-            ->withCount(['students', 'users'])
-            ->when($request->search, fn ($q, $s) => $q->where('name', 'like', "%$s%")->orWhere('code', 'like', "%$s%"))
-            ->when($request->status, fn ($q, $st) => $q->where('status', $st))
-            ->latest();
+        $search = mb_strtolower(trim((string) $request->search));
+        $counts = $this->studentCounts();
 
-        // Si la table SaaS `schools` est vide, on affiche les établissements réels
-        // (T_ETABLISSEMENT) pour que le super admin les voie tout de même.
-        try {
-            if (School::query()->count() === 0) {
-                $search = strtolower((string) $request->search);
-                $rows = \App\Models\Etablissement::available()
-                    ->map(function ($e) {
-                        $n = $e->toNormalized();
-                        return [
-                            'id' => $n['code'], 'code' => $n['code'], 'name' => $n['name'],
-                            'sigle' => null, 'city' => $n['ville'] ?? null, 'country' => "Côte d'Ivoire",
-                            'status' => 'active', 'currency' => 'XOF',
-                            'students_count' => 0, 'users_count' => 0,
-                            'current_subscription' => null, 'is_legacy' => true,
-                        ];
-                    })
-                    ->filter(fn ($r) => $search === '' || str_contains(strtolower((string) $r['name']), $search) || str_contains(strtolower((string) $r['code']), $search))
-                    ->values();
-                return response()->json(['data' => $rows, 'legacy' => true]);
-            }
-        } catch (\Throwable $e) {}
+        $rows = Etablissement::query()->orderBy('RAISONSOCIALE')->get()
+            ->map(fn ($e) => $this->present($e, $counts))
+            ->filter(fn ($r) => $search === ''
+                || str_contains(mb_strtolower((string) $r['name']), $search)
+                || str_contains(mb_strtolower((string) $r['code']), $search))
+            ->filter(fn ($r) => ! $request->status || $r['status'] === $request->status)
+            ->values();
 
-        return $q->paginate($request->per_page ?? 15);
+        return response()->json(['data' => $rows]);
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'sigle' => ['nullable', 'string', 'max:50'],
-            'code' => ['nullable', 'string', 'unique:schools,code'],
-            'responsable_name' => ['nullable', 'string'],
-            'address' => ['nullable', 'string'],
-            'city' => ['nullable', 'string'],
-            'country' => ['nullable', 'string'],
-            'language' => ['nullable', 'string', 'max:8'],
-            'phone' => ['nullable', 'string'],
-            'email' => ['nullable', 'email'],
-            'website' => ['nullable', 'string'],
-            'timezone' => ['nullable', 'string'],
-            'rccm' => ['nullable', 'string'],
-            'tax_number' => ['nullable', 'string'],
-            'currency' => ['nullable', 'string', 'max:8'],
-            // Compte administrateur initial
-            'admin_name' => ['required', 'string'],
-            'admin_email' => ['required', 'email', 'unique:users,email'],
-            'admin_password' => ['required', Password::defaults()],
-            // Abonnement initial
-            'subscription_plan_id' => ['nullable', 'exists:subscription_plans,id'],
-            'trial_days' => ['nullable', 'integer', 'min:0'],
+        $data = $request->validate($this->rules() + [
+            'code' => ['required', 'string', 'max:10', Rule::unique('economat.T_ETABLISSEMENT', 'CODE')],
+            'name' => ['required', 'string', 'max:550'],
         ]);
 
-        return DB::transaction(function () use ($data) {
-            $school = School::create([
-                'name' => $data['name'],
-                'sigle' => $data['sigle'] ?? null,
-                'code' => $data['code'] ?? strtoupper(Str::slug($data['name'], '')).'-'.strtoupper(Str::random(3)),
-                'responsable_name' => $data['responsable_name'] ?? null,
-                'address' => $data['address'] ?? null,
-                'city' => $data['city'] ?? null,
-                'country' => $data['country'] ?? null,
-                'language' => $data['language'] ?? 'fr',
-                'status' => 'active',
-                'phone' => $data['phone'] ?? null,
-                'email' => $data['email'] ?? null,
-                'website' => $data['website'] ?? null,
-                'timezone' => $data['timezone'] ?? 'Africa/Abidjan',
-                'rccm' => $data['rccm'] ?? null,
-                'tax_number' => $data['tax_number'] ?? null,
-                'currency' => $data['currency'] ?? 'XOF',
-            ]);
+        $e = new Etablissement();
+        $e->CODE = strtoupper(trim($data['code']));
+        $this->fill($e, $data);
+        $e->STATUT = self::STATUTS['active'];
+        $e->save();
 
-            $admin = User::create([
-                'name' => $data['admin_name'],
-                'email' => $data['admin_email'],
-                'password' => Hash::make($data['admin_password']),
-                'role' => 'admin',
-                'school_id' => $school->id,
-                'is_active' => true,
-            ]);
+        AuditLogger::log('create', "Création de l'établissement {$e->RAISONSOCIALE} ({$e->CODE})");
 
-            if (! empty($data['subscription_plan_id'])) {
-                $plan = SubscriptionPlan::find($data['subscription_plan_id']);
-                $days = $data['trial_days'] ?? 30;
-                Subscription::create([
-                    'school_id' => $school->id,
-                    'subscription_plan_id' => $plan->id,
-                    'starts_at' => Carbon::now()->toDateString(),
-                    'ends_at' => Carbon::now()->addDays($days)->toDateString(),
-                    'status' => $days > 0 && $plan->price == 0 ? 'trial' : 'active',
-                    'amount' => $plan->price,
-                    'auto_renew' => false,
-                ]);
-            }
-
-            AuditLogger::log('create', "Création de l'établissement {$school->name}", $school);
-
-            return response()->json($school->load('currentSubscription.plan', 'users'), 201);
-        });
+        return response()->json($this->present($e->fresh() ?? $e), 201);
     }
 
-    public function show(School $school)
+    public function show(string $school)
     {
-        return $school->load(['currentSubscription.plan', 'subscriptions.plan', 'users'])
-            ->loadCount(['students', 'users']);
+        return $this->present($this->find($school), $this->studentCounts());
     }
 
-    public function update(Request $request, School $school)
+    public function update(Request $request, string $school)
     {
-        $data = $request->validate([
-            'name' => ['sometimes', 'string', 'max:255'],
-            'sigle' => ['nullable', 'string', 'max:50'],
-            'responsable_name' => ['nullable', 'string'],
-            'address' => ['nullable', 'string'],
-            'city' => ['nullable', 'string'],
-            'country' => ['nullable', 'string'],
-            'language' => ['nullable', 'string', 'max:8'],
-            'phone' => ['nullable', 'string'],
-            'email' => ['nullable', 'email'],
-            'website' => ['nullable', 'string'],
-            'timezone' => ['nullable', 'string'],
-            'rccm' => ['nullable', 'string'],
-            'tax_number' => ['nullable', 'string'],
-            'currency' => ['nullable', 'string', 'max:8'],
+        $e = $this->find($school);
+        $data = $request->validate($this->rules() + [
+            'name' => ['sometimes', 'required', 'string', 'max:550'],
         ]);
-        $school->update($data);
-        AuditLogger::log('update', "Modification de l'établissement {$school->name}", $school);
+        $this->fill($e, $data);
+        $e->save();
 
-        return $school;
+        AuditLogger::log('update', "Modification de l'établissement {$e->RAISONSOCIALE} ({$e->CODE})");
+
+        return $this->present($e, $this->studentCounts());
     }
 
-    public function setStatus(Request $request, School $school)
+    public function setStatus(Request $request, string $school)
     {
-        $data = $request->validate(['status' => ['required', 'in:active,suspended,inactive']]);
-        $school->update(['status' => $data['status']]);
-        AuditLogger::log('update', "Statut de {$school->name} → {$data['status']}", $school);
+        $e = $this->find($school);
+        $data = $request->validate(['status' => ['required', Rule::in(array_keys(self::STATUTS))]]);
+        $e->STATUT = self::STATUTS[$data['status']];
+        $e->save();
 
-        return $school;
+        AuditLogger::log('update', "Statut de {$e->RAISONSOCIALE} → {$e->STATUT}");
+
+        return $this->present($e, $this->studentCounts());
     }
 
-    public function destroy(School $school)
+    public function destroy(string $school)
     {
-        $name = $school->name;
-        $school->delete();
+        $e = $this->find($school);
+
+        // On ne supprime pas un établissement qui a encore des élèves rattachés.
+        $eleves = $this->studentCounts()[(string) $e->CODE] ?? 0;
+        if ($eleves > 0) {
+            return response()->json([
+                'message' => "Impossible de supprimer : {$eleves} élève(s) sont rattachés à cet établissement. Suspendez-le plutôt.",
+            ], 422);
+        }
+
+        $name = $e->RAISONSOCIALE;
+        $e->delete();
         AuditLogger::log('delete', "Suppression de l'établissement {$name}");
 
         return response()->json(['message' => 'Établissement supprimé.']);
+    }
+
+    private function rules(): array
+    {
+        return [
+            'type' => ['nullable', 'string', 'max:50'],
+            'address' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:200'],
+            'fax' => ['nullable', 'string', 'max:20'],
+            'email' => ['nullable', 'email', 'max:50'],
+            'website' => ['nullable', 'string', 'max:50'],
+            'nom_resp' => ['nullable', 'string', 'max:50'],
+            'prenom_resp' => ['nullable', 'string', 'max:50'],
+            'contact_resp' => ['nullable', 'string', 'max:50'],
+            'email_directeur' => ['nullable', 'email', 'max:50'],
+            'city' => ['nullable', 'string', 'max:50'],
+            'circonscription' => ['nullable', 'string', 'max:50'],
+            'code_societe' => ['nullable', 'string', 'max:50'],
+        ];
+    }
+
+    private function fill(Etablissement $e, array $data): void
+    {
+        foreach (self::MAP as $in => $col) {
+            if (array_key_exists($in, $data)) {
+                $v = is_string($data[$in]) ? trim($data[$in]) : $data[$in];
+                $e->{$col} = $v === '' ? null : $v;
+            }
+        }
+    }
+
+    private function find(string $code): Etablissement
+    {
+        return Etablissement::query()->where('CODE', $code)->firstOrFail();
+    }
+
+    /** Nombre d'élèves (T_ETUDIANT) par code d'établissement. */
+    private function studentCounts(): array
+    {
+        // Même détection de colonne que le modèle Student (T_ETUDIANT.Site).
+        $col = Student::col(['Site', 'SITE', 'CODEETABLISSEMENT', 'CodeEtablissement']);
+        if (! $col) {
+            return [];
+        }
+        try {
+            return DB::connection('economat')->table('T_ETUDIANT')
+                ->select($col, DB::raw('COUNT(*) AS n'))
+                ->groupBy($col)
+                ->pluck('n', $col)
+                ->map(fn ($n) => (int) $n)->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    private function present(Etablissement $e, array $counts = []): array
+    {
+        $f = $e->toFull();
+        $statut = strtoupper(trim((string) ($f['statut'] ?? '')));
+        $status = array_search($statut, self::STATUTS, true) ?: 'active'; // STATUT vide = actif
+        $code = (string) $f['code'];
+
+        return [
+            'id' => $code,
+            'code' => $code,
+            'name' => $f['raison_sociale'] ?: $code,
+            'type' => $f['type'],
+            'address' => $f['adresse'],
+            'phone' => $f['telephone'],
+            'fax' => $f['fax'],
+            'email' => $f['email'],
+            'website' => $f['site_web'],
+            'nom_resp' => $f['nom_resp'],
+            'prenom_resp' => $f['prenom_resp'],
+            'contact_resp' => $f['contact_resp'],
+            'email_directeur' => $f['email_directeur'],
+            'responsable_name' => trim(($f['nom_resp'] ?? '').' '.($f['prenom_resp'] ?? '')) ?: null,
+            'city' => $f['sous_prefecture'],
+            'circonscription' => $f['circonscription'],
+            'code_societe' => $f['code_societe'],
+            'status' => $status,
+            'students_count' => $counts[$code] ?? (is_numeric($f['nbre_eleves']) ? (int) $f['nbre_eleves'] : 0),
+            // Fiche complète (toutes les colonnes de T_ETABLISSEMENT).
+            'details' => $f,
+        ];
     }
 }

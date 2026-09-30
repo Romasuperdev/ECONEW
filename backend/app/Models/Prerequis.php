@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\AnneeContext;
 use App\Support\EtablissementContext;
 use App\Support\SchemaCache;
@@ -19,6 +21,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Prerequis extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_PREREQUIS';
     public $timestamps = false;
@@ -88,16 +92,11 @@ class Prerequis extends Model
 
     public static function available()
     {
+        // Isolation STRICTE : uniquement le tenant courant, aucun repli global.
         try {
-            $rows = static::forTenant()->get();
-            if ($rows->isEmpty()) {
-                $m = static::mapping();
-                $soc = SocieteContext::current();
-                $rows = static::query()->when($m['societe'] && $soc, fn ($q) => $q->where($m['societe'], $soc))->get();
-            }
-            return $rows;
+            return static::forTenant()->get();
         } catch (\Throwable $e) {
-            try { return static::query()->get(); } catch (\Throwable $e2) { return collect(); }
+            return collect();
         }
     }
 

@@ -18,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // API stateless par token Bearer (pas de CSRF / cookies)
         // Journalisation automatique de toutes les écritures -> JOURNAL_ACTIVITES.md
         $middleware->api(append: [
+            // Cloisonnement multi-tenant : rejette toute usurpation de contexte
+            // société / établissement via les en-têtes X-* (défense en profondeur).
+            \App\Http\Middleware\EnforceTenant::class,
             \App\Http\Middleware\ActivityJournal::class,
             // Verrou global : aucune saisie sur une année scolaire clôturée.
             \App\Http\Middleware\ExerciceGuard::class,

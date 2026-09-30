@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\IsTenantScoped;
+
 use App\Support\AnneeContext;
 use App\Support\SocieteContext;
 use Illuminate\Database\Eloquent\Builder;
@@ -14,6 +16,8 @@ use Illuminate\Database\Eloquent\Model;
  */
 class SchoolClass extends Model
 {
+    use IsTenantScoped;
+
     protected $connection = 'economat';
     protected $table = 'T_CLASSE';
     protected $primaryKey = 'num';
@@ -66,21 +70,13 @@ class SchoolClass extends Model
      */
     public static function available()
     {
+        // Isolation STRICTE : uniquement le tenant courant, aucun repli global.
         $base = fn () => static::with('niveau')->withCount('students')->orderBy('LibelleClasse');
         try {
-            $rows = $base()->forTenant()->get();
+            return $base()->forTenant()->get();
         } catch (\Throwable $e) {
-            $rows = collect();
+            return collect();
         }
-        if ($rows->isEmpty()) {
-            $soc = SocieteContext::current();
-            try {
-                $rows = $base()->when($soc, fn ($q) => $q->where('CODESOCIETE', $soc))->get();
-            } catch (\Throwable $e) {
-                try { $rows = $base()->get(); } catch (\Throwable $e2) { $rows = collect(); }
-            }
-        }
-        return $rows;
     }
 
     public function toNormalized(): array
